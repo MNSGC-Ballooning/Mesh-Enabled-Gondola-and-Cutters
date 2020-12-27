@@ -168,7 +168,7 @@ SoftwareSerial xbeeSerial(Xbee_RX, Xbee_TX);        //Initializes the xbee seria
 RelayXBee xbee = RelayXBee(&xbeeSerial,xbeeID);     //Creates XBee Object
 byte cutterAIdentifier = 0x01;                      //Holds the gondola's individual ID, set during xbeeStartup()
 byte connectedG = 0x00;                             //ID of the gondola the cutter is connected to
-short downtimeG = 0;                                //Holds the millis time (secs) of last successful transmission. If goes over 30 secs since last, cutter resets name and listens for gondola
+unsigned long downtimeG = 0;                                //Holds the millis time (secs) of last successful transmission. If goes over 30 secs since last, cutter resets name and listens for gondola
 struct data{                                 // FOR OUTGOING DATA
   uint8_t startByte;
   uint8_t cutterTag;
@@ -197,7 +197,7 @@ struct input{                                // FOR INCOMING DATA
 }inputPacket;
 
 // Autonomous operation variables
-long timeOut;
+unsigned long timeOut;
 bool autonomousNow = false;
 uint8_t counterZero = 0; 
 uint8_t counterOne = 0;
@@ -264,7 +264,7 @@ void loop() {
 
     updateXbee();
     timeOut = millis()-(downtimeG*1000);
-    if( timeOut > 1*M2MS){ // change to desired max disconnect time
+     if( timeOut > 1*M2MS){ // change to desired max disconnect time
       autonomousNow = true;
       Serial.println(F("Autonomous Mode ON"));
     }

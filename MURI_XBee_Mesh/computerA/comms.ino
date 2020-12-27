@@ -173,7 +173,7 @@ void recieveTransmission() {
             //prevStopByte = inputPacket.stopByte;
             return false; 
           }
-          if(inputPacket.command == 0x25 && inputPacket.cutterTag == 0x42)           // cut command
+          if(inputPacket.command == 0x15 && inputPacket.cutterTag == 0x41)           // cut command
       cutResistorOnA();
     else if( inputPacket.command == 0x30 ){
       Serial.println(F("30"));
