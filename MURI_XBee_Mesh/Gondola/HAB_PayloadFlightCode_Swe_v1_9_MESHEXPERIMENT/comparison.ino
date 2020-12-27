@@ -2,7 +2,7 @@
 ///////////******************* BEGINNING OF CDU FUNCTIONS *************************//////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-void CompareGPS() {
+ bool CompareGPS() {
 
   for(int i=SIZE-2; i>=0; i--) {
     // "push back" array indices by one to make room for new values
@@ -41,45 +41,56 @@ void CompareGPS() {
   dt = (timeStamp[1] - timeStamp[9])/1000;
   checkFix();
     
-  if(!AWorking && !BWorking && !CWorking) { // if none of them are working
+  if(!AWorking && !BWorking && !CWorking && tenGoodHits && Altitude[0]>= ALTITUDE_FLOOR) { // NEW-ISH
+    // if no GPS are working AND we've had 10 good hits AND altitude is above minimum, use linear progression
     latitude[0] = getNextLat(latitude[1],heading,dt,groundSpeed);
     longitude[0] = getNextLong(longitude[1],latitude[1],heading,dt,groundSpeed);
     Altitude[0] = getNextAlt(ascentRate,dt,Altitude[1]);
+    Serial.println(F("GPS NOT WORKING"));
+    detData.Usage = 0x05; // NEW
+    return false; // NEW
   }
   else if(AWorking && !BWorking && !CWorking) { // A only working
     latitude[0] = latA;
     longitude[0] = lonA;
     Altitude[0] = altA;
+    detData.Usage = 0x01; // NEW
   }
   else if(!AWorking && BWorking && !CWorking) { // B only working
     latitude[0] = latB;
     longitude[0] = lonB;
     Altitude[0] = altB;
+    detData.Usage = 0x01; // NEW
   }
   else if(!AWorking && !BWorking && CWorking) { // C only working
     latitude[0] = latC;
     longitude[0] = lonC;
     Altitude[0] = altC;
+    detData.Usage = 0x01; // NEW
   }
   else if(AWorking && BWorking && !CWorking) { // A and B working
     latitude[0] = (latA+latB)/2;
     longitude[0] = (lonA+lonB)/2;
     Altitude[0] = (altA+altB)/2;
+    detData.Usage = 0x02; // NEW
   }
   else if(AWorking && !BWorking && CWorking) { // A and C working
     latitude[0] = (latA+latC)/2;
     longitude[0] = (lonA+lonC)/2;
     Altitude[0] = (altA+altC)/2;
+    detData.Usage = 0x02; // NEW
   }
   else if(!AWorking && BWorking && CWorking) { // B and C working
     latitude[0] = (latB+latC)/2;
     longitude[0] = (lonB+lonC)/2;
     Altitude[0] = (altB+altC)/2;
+    detData.Usage = 0x02; // NEW
   }
   else if(AWorking && BWorking && CWorking) { // A B and C working
     latitude[0] = (latA+latB+latC)/3;
     longitude[0] = (lonA+lonB+lonC)/3;
     Altitude[0] = (altA+altB+altC)/3;
+    detData.Usage = 0x03; // NEW
   }
 
 
@@ -93,6 +104,19 @@ lonCPrev = lonC;
 altAPrev = altA;
 altBPrev = altB;
 altCPrev = altC;
+
+if (detData.Usage == 0x01 || detData.Usage == 0x02 || detData.Usage == 0x03) // ALL NEW
+{
+  tenGoodHitsCounter+=1;
+  if (tenGoodHitsCounter == 10) tenGoodHits = true;
+}
+
+GPSdata.alt = Altitude[0]; // NEW
+GPSdata.latitude = latitude[0]; // NEW
+GPSdata.longitude = longitude[0]; // NEW
+GPSdata.AR = ascentRate; // NEW
+
+return true;
 
 }
 

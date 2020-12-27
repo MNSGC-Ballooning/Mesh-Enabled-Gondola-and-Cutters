@@ -33,7 +33,7 @@ uint8_t utcSec = 0;   //UTC Time - Seconds
 #define xbeeSerial Serial5
 #define tooManyContacts 100                         //If system has recorded more than this amount of contacts, the memory of known contacts is reset to prevent a memory leak if there's a bug
 #define xbeeChannel 'C'                             //Shorthand for a communication channel preset (See RelayXBee library for specifics)
-#define CDU_RX_SIZE 36                              //Number of bytes in CDU packet
+#define CDU_RX_SIZE 35                            //Number of bytes in CDU packet
 #define CDU_TX_SIZE 7                               //Number of bytes in a gondola packet
 #define keepRadioEvents false                       //If true, radioEvents builds throughout flight. Otherwise, it is cleared at the start of every updateXbee() call
 #define waitForReconnection 35                      //Amount of time (secs) of radio inactivity before the gondola starts searching for a lost cutter. Should be more than the equivelant value
@@ -62,6 +62,8 @@ byte id_erau[2] = {0xA0, 0xB1};//Identifier for GPS + ERAU packet.
 uint16_t type = 0;             //Identifier for type of turbulence packet.
 uint16_t sps_start = 0;        //Identifier for SPS30 data packet.
 uint16_t erau_checksum = 0;
+uint16_t checksum;  
+uint8_t cutReasonA,  cutReasonB;
 
 uint16_t sps_packet_number = 0;// Used to test whether packets are being skipped - may be removed later
 uint16_t cu_packet_number = 0; // Used to test whether packets are being skipped - may be removed later
@@ -74,6 +76,7 @@ uint16_t cu_packet_number = 0; // Used to test whether packets are being skipped
 #define RAW_SIZE 73             // Number of bytes in raw packet
 #define CDU_RX_SIZE 36          // Number of bytes in CDU packet
 #define CDU_TX_SIZE 7           // Number of bytes to send to CDU
+
 
 //CODES FOR BLUETOOTH
 byte CUT_A_command = 0x15;      // Gondola to cutter A - CUT command
@@ -181,66 +184,70 @@ float altA, altB, altC, altAPrev, altBPrev, altCPrev;
 ///////////********************** STATE MACHINE DEFINITIONS ***********************//////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-float tempInt_float = 0;  // For main gondola Teensy, temperature failure will not be checked
+#define M2MS 60000
+#define ALTITUDE_FLOOR 5000
+#define ALTITUDE_CEILING 100000
+#define SA_FLOOR 50000
+#define SLOW_DESCENT_FLOOR 80000
+////change boundaries before every flight!!!////
+#define EASTERN_BOUNDARY -92.55
+#define WESTERN_BOUNDARY -96.45
+#define SOUTHERN_BOUNDARY 43.68
+#define NORTHERN_BOUNDARY 50.45//44.62
+///////////////////////////////////////////////
+#define MASTER_TIMER M2MS
+#define ASCENT_TIMER 150*M2MS
+#define SA_TIMER 30*M2MS
+#define FLOAT_TIMER 30*M2MS
+#define SLOW_DESCENT_TIMER 40*M2MS
+#define INITIALIZATION_TIME 25*M2MS
+#define DEFAULT_TIME 30*M2MS
 
-// Make sure to update Boundaries!!!
-
-
-// States
-#define INITIALIZATION 0x00   // corresponding hex values are chosen so as to avoid bit-flipping in the stratosphere
+#define INITIALIZATION 0x00
 #define ASCENT 0x01
 #define SLOW_ASCENT 0x02
+#define FLOAT 0x03
 #define SLOW_DESCENT 0x04
-#define DESCENT 0x08
-#define FLOAT 0x10
-#define OUT_OF_BOUNDARY 0x20
-#define TEMPERATURE_FAILURE 0x40
-#define RECOVERY 0x80
+#define DESCENT 0x05
+#define TEMP_FAILURE 0x06
+#define BATTERY_FAILURE 0x07
+#define OUT_OF_BOUNDS 0x08
+#define PAST_TIMER 0x09
+#define ERROR_STATE 0x10
 
-// Boundaries
-///////CHANGE BEFORE EACH FLIGHT////////
-#define EASTERN_BOUNDARY -93.06           // longitudes
-#define WESTERN_BOUNDARY -94.281
-#define NORTHERN_BOUNDARY 44.29            // latitudes
-#define SOUTHERN_BOUNDARY 43.94
-#define SLOW_DESCENT_CEILING 100000.0     // max altitude stack can reach before balloon is cut and stack enters slow descent state
-#define SLOW_DESCENT_FLOOR 80000.0        // min altitude for the slow descent state
-#define INIT_ALTITUDE 5000.0              // altitude at which the state machine begins
-#define RECOVERY_ALTITUDE 7000.0          // altitude at which the recovery state intializes on descent
-#define MIN_TEMP -70.0                    // minimum acceptable internal temperature
-#define MAX_TEMP 90.0                     // maximum acceptable interal temperature
+// have compareGPS output the following GPS average of all systems, saved as struct
+struct GPSData{ // proposed struct filled out by compareGPS
+  float alt;
+  float latitude;
+  float longitude;
+  float AR;
+} GPSdata;
 
-// Velocity Boundaries
-#define MAX_SA_RATE 375                 // maximum velocity (ft/min) that corresponds to a slow ascent state
-#define MAX_FLOAT_RATE 100              // maximum velocity that corresponds to a float state, or minimum for a slow ascent state
-#define MIN_FLOAT_RATE -100             // minimum velocity that corresponds to a float state, or maximum for a slow descent state
-#define MIN_SD_RATE -600                // minimum velocity that corresponds to a slow desent state
+struct DetData{ // proposed struct filled out by Determination
+  // lat, long = 0 if GPS data is bad (might want to use something other than 0)
+  // pressure = 0 if GPS data is good
+  
+  float alt;
+  float latitude;
+  float longitude;
+  float AR;
+  float pressure;
+  float Time; 
+  uint8_t Usage; // 00 means using timer (error on all others), 01 means using 1 GPS, 02 using 2 GPS, 03 all 3 GPS, 04 using pressure, 05 using linear progression
+} detData;
+uint8_t SDcounter = 0;
+uint8_t ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0;
+uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0;
+unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0;
 
-// Intervals
-#define FIX_INTERVAL 5000               // GPS with a fix�will flash for 5 seconds
-#define NOFIX_INTERVAL 2000             // GPS with no fix�will flash for 2 seconds
-#define GPS_LED_INTERVAL 10000          // GPS LED runs on a 10 second loop
-#define UPDATE_INTERVAL 2000            // update all data and the state machine every 4 seconds
-#define CUT_INTERVAL 30000              // ensure the cutting mechanism is on for 30 seconds
-#define MASTER_INTERVAL_A 210             // master timer that cuts balloon after 2hr, 15min
-#define MASTER_INTERVAL_B 240             
-#define PRESSURE_TIMER_INTERVAL 50      // timer that'll cut the balloon 50 minutes after pressure reads 70k feet
-#define ASCENT_INTERVAL 210             // timer that cuts balloon A 3 hours and 30 minutes after ASCENT state initializes
-#define SLOW_DESCENT_INTERVAL 60        // timer that cuts both balloons (as a backup) an hour after SLOW_DESCENT state initializes
+bool tenGoodHits = false;
+uint8_t tenGoodHitsCounter = 0;
 
-#define M2MS 60000
+uint8_t stateSuggest; // state recommended by control
+uint8_t currentState = INITIALIZATION; // state we are in, starts as initialization
 
-// State Machine
-uint8_t state = 0x00;
-bool stateSwitched;
-bool maxAltReached = false;
-bool cutStatusA = false, cutStatusB = false;
-uint8_t cutReasonA,  cutReasonB;
-String stateString;
-uint8_t prevHit = 1;
-uint8_t thisHit = 1;
-
-unsigned long updateStamp;
+unsigned long updateStamp, SDstamp, descentStamp, timerStampCutA;
 int which = 1;
 
 int cwsa = 0, hwsa = 0;
+///////////////////////////////////////////////////////////////////////////////////////////////////

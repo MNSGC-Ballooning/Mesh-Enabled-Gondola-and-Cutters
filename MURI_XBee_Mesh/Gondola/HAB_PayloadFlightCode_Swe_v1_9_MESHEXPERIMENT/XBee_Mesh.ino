@@ -46,6 +46,11 @@ bool sendMeshData(byte *meshdata, bool aorb) {      //Sends data to A (aorb=0) o
     }
     else return false;
   }
+  for(int i=0; i<CDU_TX_SIZE; i++) {
+    Serial.println(" ");
+    Serial.println(meshdata[i]);
+    Serial.print(" ");
+  }
   return true;
 }
 

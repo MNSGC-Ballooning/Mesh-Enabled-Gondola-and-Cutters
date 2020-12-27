@@ -1,375 +1,453 @@
-/////////////////////////////////////////////////////////////////////////////////////////////////
-///////////******************* BEGINNING OF STATE MACHINE FUNCTIONS ***************//////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ALL NEW~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // CUT REASON KEY
 // Ascent Timer ran out 0x00
 // Termination altitude reached 0x01
-// Slow ascent state 0x02
-// Reached slow descent floor 0x03
-// Float state 0x04
-// Battery failure 0x05
-// Reached eastern boundary 0x10
-// Reached western boundary 0x20
-// Reached Northern boundary 0x30
-// Reached southern boundary 0x40
-// Below min temp 0x50
-// Above max temp 0x60
+// Slow ascent timer ran out 0x02
+// In slow ascent, under threshold 0x03
+// Float timer ran out 0x04
+// Reached slow descent floor 0x05
+// Slow descent timer ran out 0x06
+// Out of bounds 0x07
+// Master timer ran out 0x08
+// Error - default state timers 0x09
+//////////////////////////////////DETERMINATION////////////////////////////////////////////////////
+void Determination(){
+  // takes in GPS data, pressure data, and current time
+  // if GPS is valid, uses GPS to determine lat, long, alt, and AR
+  // if GPS is not valid but pressure is, calculates altitude and AR (below 80000ft)
+  // if neither are valid, and above floor with at least 10 good previous GPS hits, use linear progression
+  // if below floor with bad GPS, throws error
+  // uses hex indication as to whether it is using GPS, pressure, or linear progression
 
-void stateMachine() {
-  // ensure the state machine does not start until a certain intial altitude is reached
-  static bool initDone = false;
-  static bool initComplete = false;
-  static byte initCounter = 0;
-  CompareGPS();
-  if(!initComplete){
-    state = INITIALIZATION;
-    stateString = F("Initialization");
-    if(Altitude[1] > INIT_ALTITUDE) {
-      initCounter++;
-      if(initCounter >= 40) {
-        initCounter = 0;
-        initComplete = true; 
+  if (CompareGPS()){ // have compareGPS return a bool - true if GPS data is good, false if not (all 3 GPS fail) SET DETDATA.USAGE TO 1, 2, or 3 in COMPAREGPS FUNCTION
+    
+    detData.alt = GPSdata.alt;
+    detData.latitude = GPSdata.latitude;
+    detData.longitude = GPSdata.longitude;
+    detData.AR = GPSdata.AR;
+    
+  }
+  
+  /*else if (pressureValid()){ // need a way to determine if the pressure is valid
+
+    Serial.println(F("GPS NOT WORKING");
+    detData.pressure = pressure;
+    detData.alt = GetAltFromPressure();
+    detData.latitude = 0; // or other alternative - 0 may be unreliable
+    detData.longitude = 0;
+    detData.AR = GetARFromPressure();
+    detData.Usage = 0x04; // using pressure for determination
+      
+  }*/
+
+  /*else if (tenGoodHits && (Altitude[0] >= ALTITUDE_FLOOR)){ 
+
+    THIS FUNCTIONALITY CAN BE FOUND IN COMPARISON FOR IF NO GPS IS WORKING
+    maybe this should be if tenGoodHits is false, and assume AR = 800 ft/min
+
+    Serial.println(F("GPS NOT WORKING");
+    linearProgression();
+    detData.Usage = 0x05; // using linear progression
+    
+  }*/
+
+  else{
+    Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground
+    detData.Usage = 0x00; // indicates error
+    // have LED indication
+  }
+  
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////CONTROL////////////////////////////////////////////////////////////////////////////
+void Control(){
+  // uses detData to determine what state it thinks we should be in
+  // worst case states take priority, but every possible state is outputted as hex
+
+  if (detData.AR>=375){
+    stateSuggest = ASCENT;
+  }
+  if (detData.AR<375 && detData.AR>=100){
+    stateSuggest = SLOW_ASCENT;
+  }
+  if (detData.AR<100 && detData.AR>-100){
+    stateSuggest = FLOAT;
+  }
+  if (detData.AR<=-100 && detData.AR>-375){
+    stateSuggest = SLOW_DESCENT;
+  }
+  if (detData.AR<=375){
+    stateSuggest = DESCENT;
+  }
+
+  /*if (tempfailure){
+    stateSuggest = TEMP_FAILURE;
+  }
+
+  if (batteryFailure){
+    stateSuggest = BATTERY_FAILURE;
+  }*/
+
+  if ((detData.longitude > EASTERN_BOUNDARY) || (detData.longitude < WESTERN_BOUNDARY) || (detData.latitude >NORTHERN_BOUNDARY) || (detData.latitude < SOUTHERN_BOUNDARY)){
+    stateSuggest = OUT_OF_BOUNDS;  
+  }
+
+  
+
+  if (detData.Usage == 0x00){ // error state
+    stateSuggest = ERROR_STATE; // doesn't exist - State will go to default
+  }
+
+  if (millis() > MASTER_TIMER){
+    stateSuggest = PAST_TIMER;
+  }
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////STATE/////////////////////////////////////////////////////////////////
+void State(){
+  // take in stateSuggest from control and switches into that state after a predetermined number of hits
+  switch (stateSuggest){
+    ////ASCENT////
+    case ASCENT:
+    
+      if (currentState!=ASCENT){ // criteria for entering Ascent functionality
+        ascentCounter += 1; // increment ascent counter
+        SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (ascentCounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = ASCENT;
+          ascentStamp = millis();
+        }
       }
-    }
-    if(Altitude[1] < INIT_ALTITUDE){
-      initCounter = 0;
-    }
-  }
-  // run state switch function if the state machine is intialized
-  if (initComplete) { 
-    stateSwitch();
-  }
 
-  uint16_t checksum;  
-  // run functions based off of the current state
-  switch(state) {
-    ///// Ascent /////
-    case 0x01:
-      stateString = F("Ascent");
-
-      static unsigned long ascentStamp = millis();
-
-      // cut balloon A if the ascent timer runs out
-      if(millis() - ascentStamp > ASCENT_INTERVAL*M2MS) {
-        //******************* SEND CUT COMMAND TO CUTTER COMPUTER A ******************////////////
+      if (currentState==ASCENT){ // operations while in ascent
+        
+        if (millis()-ascentStamp >= ASCENT_TIMER){ // if ascent timer is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
-        cutReasonA = 0x00;
-      }
-      // cut balloon A if the termination altitude is reached
-      if (Altitude[0] > SLOW_DESCENT_CEILING) {
-        //******************* SEND CUT COMMAND TO CUTTER COMPUTER A *********************////////////
+          cutReasonA = 0x00;
+        }
+
+        if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
-        cutReasonA = 0x01;
+          cutReasonA = 0x01;
+        }
+       
       }
-      //else cutReasonA = F("0");
 
       break;
 
-    ///// Slow Ascent /////
-    case 0x02:
-      // cut the resistor and note state
-      stateString = F("Slow Ascent");
+    ////SLOW ASCENT////
+    case SLOW_ASCENT:
+    
+      if (currentState!=SLOW_ASCENT){ // criteria for entering Slow Ascent functionality
+          SAcounter += 1; // increment slow ascent counter
+          ascentCounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+          tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+          
+          if (SAcounter >= 60 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 60 consecutive state suggestions
+            currentState = SLOW_ASCENT;
+            SAstamp = millis();
+          }
+        }
+  
+        if (currentState==SLOW_ASCENT){ // operations while in slow ascent
+          
+          if (detData.alt > ALTITUDE_CEILING){ // if ceiling reached
+            checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+            cdu1Packet_tx[4] = checksum >> 8;
+            cdu1Packet_tx[5] = checksum;
+            sendMeshData(cdu1Packet_tx,false);
+            cutReasonA = 0x01;
+          }
+          if (millis()-SAstamp >= SA_TIMER){ // if slow ascent timer reached
+            checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+            cdu1Packet_tx[4] = checksum >> 8;
+            cdu1Packet_tx[5] = checksum;
+            sendMeshData(cdu1Packet_tx,false);
+            cutReasonA = 0x02;
+          }
 
-      // cut both balloons as the stack is ascending too slowly
-      //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B ********************////////////
+          if (detData.alt < SA_FLOOR){ // cuts immediately under threshold
+            checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+            cdu1Packet_tx[4] = checksum >> 8;
+            cdu1Packet_tx[5] = checksum;
+            sendMeshData(cdu1Packet_tx,false);
+            cutReasonA = 0x03;
+          }
+        }
+
+        break;
+
+    ////FLOAT////
+    case FLOAT:
+
+      if (currentState!=FLOAT){ // criteria for entering Float functionality
+        floatCounter += 1; // increment float counter
+        ascentCounter =0, SAcounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (ascentCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
+          currentState = FLOAT;
+          floatStamp = millis();
+        }
+      }
+
+      if (currentState==FLOAT){ // operations while in float
+        
+        if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
-          cutReasonA = 0x02;
+          cutReasonA = 0x01;
+        }
+
+        if (millis()-floatStamp >= FLOAT_TIMER){ // if timer reached
+          checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+          cdu1Packet_tx[4] = checksum >> 8;
+          cdu1Packet_tx[5] = checksum;
+          sendMeshData(cdu1Packet_tx,false);
+          cutReasonA = 0x04;
 
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
           cdu2Packet_tx[5] = checksum;
           sendMeshData(cdu2Packet_tx,true);   
-          cutReasonB = 0x02;
-
-      break;
-
-    ///// Slow Descent /////      
-    case 0x04:
-      // organize timing schema for slow descent state
-      stateString = F("Slow Descent");
-
-      static unsigned long slowDescentStamp = millis(); // initializaed upon first time in this state
-      static byte SDTerminationCounter = 0;
-
-      if(millis() - slowDescentStamp > SLOW_DESCENT_INTERVAL*M2MS || (Altitude[0] < SLOW_DESCENT_FLOOR && Altitude[0] != 0)) {
-        SDTerminationCounter++;
-
-        if(SDTerminationCounter >= 40) {
-          //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B ******************////////////
-          checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
-          cdu1Packet_tx[4] = checksum >> 8;
-          cdu1Packet_tx[5] = checksum;
-          sendMeshData(cdu1Packet_tx,false);
-          cutReasonA = 0x03;
-
-          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
-          cdu2Packet_tx[4] = checksum >> 8;
-          cdu2Packet_tx[5] = checksum;
-          sendMeshData(cdu2Packet_tx,true);    
-          cutReasonB = 0x03;
+          cutReasonB = 0x04;
         }
       }
 
       break;
 
-    ///// Descent /////
-    case 0x08:
-      // do nothing but note state
-      stateString = F("Descent");
+    ////SLOW DESCENT////
+    case SLOW_DESCENT:
 
-      static byte floorAltitudeCounter = 0;   // increments if the stack is below the slow descent altitude floor
-      static bool cutCheck = false;
-
-      if(Altitude[0] < SLOW_DESCENT_FLOOR && Altitude[0] != 0) {
-        floorAltitudeCounter++;
-
-        if(floorAltitudeCounter >= 40 && !cutCheck) {
-          floorAltitudeCounter = 0;
-
-          //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B *******************////////////
-          checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
-          cdu1Packet_tx[4] = checksum >> 8;
-          cdu1Packet_tx[5] = checksum;
-          sendMeshData(cdu1Packet_tx,false);
-          cutReasonA = 0x03;
-
-          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
-          cdu2Packet_tx[4] = checksum >> 8;
-          cdu2Packet_tx[5] = checksum;
-          sendMeshData(cdu2Packet_tx,true);    
-          cutReasonB = 0x03;
+      if (currentState!=SLOW_DESCENT){ // criteria for entering Slow Descent functionality
+        SDcounter += 1; // increment slow descent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (SDcounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = SLOW_DESCENT;
+          SDstamp = millis();
         }
       }
 
-      break;
-
-    ///// Float /////
-    case 0x10:
-      // abort flight
-      stateString = F("Float");
-
-      // cut both balloons as the stack is in a float state
-      //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B ********************////////////
+      if (currentState==SLOW_DESCENT){ // operations while in slow descent
+        
+        if (detData.alt < SLOW_DESCENT_FLOOR){ // if floor is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
-      cutReasonA = 0x04;
-      
+          cutReasonA = 0x05;
+
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
           cdu2Packet_tx[5] = checksum;
           sendMeshData(cdu2Packet_tx,true);   
-      cutReasonB = 0x04;
-
-      break;
-
-    ///// Out of Boundary /////
-    case 0x20:
-      // cut resistor and note state
-      stateString = F("Out of Boundary");
-      
-      // cut both balloons as the stack is out of the predefined flight boundaries
-      //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B ********************////////////
+          cutReasonB = 0x05;
+        }
+        
+        else if (millis()-SDstamp >= SLOW_DESCENT_TIMER){ // if timer is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
-                    
-      
+          cutReasonA = 0x06;
+
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
           cdu2Packet_tx[5] = checksum;
-          sendMeshData(cdu2Packet_tx,true);
-       // cut reasons are more specifically defined in the boundaryCheck() function
+          sendMeshData(cdu2Packet_tx,true);   
+          cutReasonB = 0x06;
+        }
+      }
 
       break;
 
-    ///// Temperature Failure /////
-//    case 0x40:
-//      // cut resistor and note state
-//      stateString = F("Temperature Failure");
-//
-//      // cut balloon as temps are at critical levels
-//      //******************* SEND CUT COMMAND TO CUTTER COMPUTERS A AND B ********************////////////
-//      checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
-//          cdu1Packet_tx[4] = checksum >> 8;
-//          cdu1Packet_tx[5] = checksum;
-//          Serial4.write(cdu1Packet_tx, CDU_TX_SIZE);
-//      
-//      checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
-//          cdu2Packet_tx[4] = checksum >> 8;
-//          cdu2Packet_tx[5] = checksum;
-//          Serial5.write(cdu2Packet_tx, CDU_TX_SIZE);
-//      
-//      cutReasonA = 0x50;
-//      cutReasonB = 0x50;
-//
-//      break;
 
-    ///// Recovery /////
-    case 0x80:
-      // reserved for any functions near the ground
-      stateString = F("Recovery");
+    ////DESCENT////
+    case DESCENT:
+    
+      if (currentState!=DESCENT){ // criteria for entering Descent functionality
+        descentCounter += 1; // increment descent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0;
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (descentCounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = DESCENT;
+          descentStamp = millis();
+        }
+      }
+
+      if (currentState==DESCENT){ // operations while in descent
+        
+        if (millis()-ascentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
+          checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+          cdu1Packet_tx[4] = checksum >> 8;
+          cdu1Packet_tx[5] = checksum;
+          sendMeshData(cdu1Packet_tx,false);
+          cutReasonA = 0x06;
+
+          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
+          cdu2Packet_tx[4] = checksum >> 8;
+          cdu2Packet_tx[5] = checksum;
+          sendMeshData(cdu2Packet_tx,true);   
+          cutReasonB = 0x06;
+        }
+      }
 
       break;
 
-  }
-  
-}
+    ////TEMPERATURE FAILURE//// To be added later... REVIEW AND ADJUST BEFORE USING
+    /* case TEMP_FAILURE:
+    
+      if (currentState!=TEMP_FAILURE){ // criteria for entering Temperature Failure functionality
+        tempCounter += 1; // increment temperature failure counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+      }
 
+      if (currentState==TEMP_FAILURE){ // operations while in temperature failure
+        cutResistorOnA();
+        cutResistorOnB();
+      }*/
 
-void stateSwitch() {
-  Serial.println("INSIDE STATE SWTICH");
-  // initialize all counters as static bytes that begin at zero
-  static byte ascentCounter = 0,  slowAscentCounter = 0,  descentCounter = 0, slowDescentCounter = 0, recoveryCounter = 0, boundaryCounter = 0;// tempCounter = 0;
-  static uint16_t floatCounter = 0;
+    ////BATTERY FAILURE////To be added later... REVIEW AND ADJUST BEFORE USING
+    /*case BATTERY_FAILURE:
+      if (currentState!=BATTERY_FAILURE){ // criteria for entering Battery Failure functionality
+        battCounter += 1; // increment battery failure counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+      }
 
-  if(stateSwitched) {     // reset all state counters if the state was just switched
-    ascentCounter = 0;  slowAscentCounter = 0;  descentCounter  = 0;  slowDescentCounter = 0;   floatCounter  = 0; recoveryCounter = 0;  boundaryCounter = 0;//, tempCounter = 0;
-    stateSwitched = false;
-  }
+      if (currentState==BATTERY_FAILURE){ // operations while in battery failure
+        cutResistorOnA();
+        cutResistorOnB();
+      }*/
+        
+    ////OUT OF BOUNDARY////
+    case OUT_OF_BOUNDS:
+    
+      if (currentState!=OUT_OF_BOUNDS){ // criteria for entering Out of Boundary functionality
+        boundCounter += 1; // increment out of boundary counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (boundCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
+          currentState = OUT_OF_BOUNDS;
+        }
+      }
 
-  if(ascentRate > MAX_SA_RATE && state != ASCENT) {
-    ascentCounter++;
-    thisHit = 2;
-    if(ascentCounter >= 40) {
-      state = ASCENT;
-      ascentCounter = 0;
-      stateSwitched = true;
-    }
-  }
-  else if(ascentRate <= MAX_SA_RATE && ascentRate > MAX_FLOAT_RATE && state != SLOW_ASCENT) {
-    slowAscentCounter++;
-    thisHit = 2;
-    if(slowAscentCounter >= 40) {
-      state = SLOW_ASCENT;
-      slowAscentCounter = 0;
-      stateSwitched = true;
-    }
-  }
-  else if(ascentRate <= MAX_FLOAT_RATE && ascentRate >= MIN_FLOAT_RATE && state != FLOAT) {
-    floatCounter++;
-    thisHit = 2;
-    if(floatCounter >= 1800) {
-      state = FLOAT;
-      floatCounter = 0;
-      stateSwitched = true;
-    }
-  }
-  else if(ascentRate < MIN_FLOAT_RATE && ascentRate >= MIN_SD_RATE && state != SLOW_DESCENT) {
-    slowDescentCounter++;
-    thisHit = 2;
-    if(slowDescentCounter >= 40) {
-      state = SLOW_DESCENT;
-      slowDescentCounter = 0;
-      stateSwitched = true;
-    }
-  }
-  else if(ascentRate < MIN_SD_RATE && state !=DESCENT) {
-    descentCounter++;
-    thisHit = 2;
-    if(descentCounter >= 40) {
-      state = DESCENT;
-      descentCounter = 0;
-      stateSwitched = true;
-    }
-  }
-  else if(state != RECOVERY && (state == DESCENT || state == SLOW_DESCENT) && Altitude[0] < RECOVERY_ALTITUDE) {
-    recoveryCounter++;
-    thisHit = 2;
-    if(recoveryCounter >= 40) {
-      state = RECOVERY;
-      recoveryCounter = 0;
-      stateSwitched = true;
-    }
-  }
+      if (currentState==OUT_OF_BOUNDS){ // operations while out of boundary
+        checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+          cdu1Packet_tx[4] = checksum >> 8;
+          cdu1Packet_tx[5] = checksum;
+          sendMeshData(cdu1Packet_tx,false);
+          cutReasonA = 0x07;
 
-  // part of a separate series of if/else statements as criteria for this state is different
-  if(boundaryCheck() && state != OUT_OF_BOUNDARY) {
-    boundaryCounter++;
-    thisHit = 1;
-    if(boundaryCounter >= 40) {
-      state = OUT_OF_BOUNDARY;
-      boundaryCounter = 0;
-      stateSwitched = true;
-    }
-  } 
+          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
+          cdu2Packet_tx[4] = checksum >> 8;
+          cdu2Packet_tx[5] = checksum;
+          sendMeshData(cdu2Packet_tx,true);   
+          cutReasonB = 0x07;
+      }
 
- /* if(!((MIN_TEMP<tempInt_float)&&(tempInt_float<MAX_TEMP)) && state != TEMPERATURE_FAILURE)  {
-    tempCounter++;
-    thisHit = 2;
-    if(tempCounter >= 40) {
-      state = TEMPERATURE_FAILURE;
-      tempCounter  = 0;
-      stateSwitched = true;
-    }
-  } */
-  
-  // if two or more counters are greater than 0, reset all counters
-  // resets counters if non-consecutive
-  uint8_t statesHit = 0;
-  if( ascentCounter > 0 ) statesHit++;
-  if( slowAscentCounter > 0 ) statesHit++;
-  if( descentCounter > 0 ) statesHit++;
-  if( slowDescentCounter > 0 ) statesHit++;
-  if( recoveryCounter > 0 ) statesHit++;
-  if( floatCounter > 0 ) statesHit++;
-  if( statesHit >= 2 ){
-    ascentCounter = 0;
-    slowAscentCounter = 0;
-    descentCounter = 0;
-    slowDescentCounter = 0;
-    recoveryCounter = 0;
-    floatCounter = 0;
-  }
-  
-    if( prevHit != thisHit )
-  {
-    boundaryCounter = 0;
-   // tempCounter = 0; 
-  }
+      break;
 
-  prevHit = thisHit;
-     
-}
+    ////MASTER TIMER REACHED////
+    case PAST_TIMER:
 
-bool boundaryCheck() {
-  // function to check if the payload is out of the flight boundaries
-  if (longitude[0] > EASTERN_BOUNDARY) {
-    cutReasonA = 0x10;
-    cutReasonB = 0x10;
-    return true;
-  }
-  else if (longitude[0] < WESTERN_BOUNDARY) {
-    cutReasonA = 0x20;
-    cutReasonB = 0x20;
-    return true;
-  }
-  else if (latitude[0] > NORTHERN_BOUNDARY) {
-    cutReasonA = 0x30;
-    cutReasonB = 0x30;
-    return true;
-  }
-  else if (latitude[0] < SOUTHERN_BOUNDARY) {
-    cutReasonA = 0x40;
-    cutReasonB = 0x40;
-    return true; 
-  }
-  else {
-    return false;
+      if (currentState!=PAST_TIMER){ // criteria for entering Master Timer Reached functionality
+        timerCounter += 1; // increment ascent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0; // reset all other state counters
+        
+        if (timerCounter >= 10){ // activates after 10 consecutive state suggestions, regardless of altitude
+          currentState = PAST_TIMER;
+        }
+      }
+
+      if (currentState==PAST_TIMER){ // operations after Master Timer reached
+        
+        checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+        cdu1Packet_tx[4] = checksum >> 8;
+        cdu1Packet_tx[5] = checksum;
+        sendMeshData(cdu1Packet_tx,false);
+        cutReasonA = 0x08;
+        timerStampCutA = millis();
+        if (millis() - timerStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
+          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
+          cdu2Packet_tx[4] = checksum >> 8;
+          cdu2Packet_tx[5] = checksum;
+          sendMeshData(cdu2Packet_tx,true);   
+          cutReasonB = 0x08;
+        }
+      }
+
+      break;
+
+    ////DEFAULT////
+    default: 
+
+    // if initialization never triggers, moves to the next of the function where it cuts A then B
+
+      if (currentState==INITIALIZATION){ // currentState is initialized as INITIALIZATION, no other states have been activated
+
+        defaultStamp = millis();
+        if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
+
+         checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+         cdu1Packet_tx[4] = checksum >> 8;
+         cdu1Packet_tx[5] = checksum;
+         sendMeshData(cdu1Packet_tx,false);
+         cutReasonA = 0x09;
+         defaultStampCutA = millis();
+         if (millis() - defaultStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
+          checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
+          cdu2Packet_tx[4] = checksum >> 8;
+          cdu2Packet_tx[5] = checksum;
+          sendMeshData(cdu2Packet_tx,true);    
+          cutReasonB = 0x09;
+         }
+        }
+          
+        }
+
+        else {
+          // if it's not in initialization, means it entered another state at some point, then everything stopped working and stateSuggest = ERROR_STATE now
+          // should wait a while to see if it will enter a state again, then do the same cut strategy, hoping for some slow descent
+          defaultStamp2 = millis();
+          if ( (millis()-defaultStamp2) >= (DEFAULT_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave default
+
+            checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
+            cdu1Packet_tx[4] = checksum >> 8;
+            cdu1Packet_tx[5] = checksum;
+            sendMeshData(cdu1Packet_tx,false);
+            cutReasonA = 0x09;
+            defaultStampCutA = millis();
+            if (millis() - defaultStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
+              checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
+              cdu2Packet_tx[4] = checksum >> 8;
+              cdu2Packet_tx[5] = checksum;
+              sendMeshData(cdu2Packet_tx,true);    
+              cutReasonB = 0x09;
+            }
+          }
+        }
+
+        break;
+        
   }
 }
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-///////////******************* END OF STATE MACHINE FUNCTIONS *********************//////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////
