@@ -62,8 +62,9 @@ void stateMachine() {
       static unsigned long ascentStamp = millis();
 
       // cut balloon A if the ascent timer runs out
-
+     
       // cut balloon A if the termination altitude is reached
+      
 
       break;
 
@@ -85,14 +86,8 @@ void stateMachine() {
       static unsigned long slowDescentStamp = millis(); // initializaed upon first time in this state
       static byte SDTerminationCounter = 0;
 
-      if(millis() - slowDescentStamp > SLOW_DESCENT_INTERVAL*M2MS || (alt[0] < SLOW_DESCENT_FLOOR && alt[0] != 0)) {
-        SDTerminationCounter++;
 
-        if(SDTerminationCounter >= 40 && (millis() - slowDescentStamp >= SLOW_DESCENT_BUFFER*M2MS) ) {
-          requestCut();
-          cutReasonB = 0x03;
-        }
-      }
+      
 
       break;
 
@@ -145,7 +140,7 @@ void stateMachine() {
 //      stateString = F("Temperature Failure");
 //
 //      // cut balloon as temps are at critical levels
-//      cutResistorOnB(); // rather than requestCut, as this cannot be confirmed by main
+//      cutResistorOnA(); // rather than requestCut, as this cannot be confirmed by main
 //
 //      // cut reasons defined within tempCheck() function
 //
@@ -156,7 +151,10 @@ void stateMachine() {
 //
 //      stateString = F("Battery failure");
 //      // only cut A, so slow descent can be entered
-//          
+//      
+//      cutResistorOnA();
+//      cutReasonA = 0x05;
+//      
 //      break;
 
     ///// Recovery /////
@@ -256,7 +254,7 @@ void stateSwitch() {
       stateSwitched = true;
     }
   } 
-
+//
 //  if(tempCheck() && state != TEMPERATURE_FAILURE){
 //    tempCounter++;
 //    thisHit = 2;
@@ -268,7 +266,7 @@ void stateSwitch() {
 //      stateSwitched = true;
 //    }
 //  }
-//  if(2*analogRead(VOLTAGE_PIN) < MINIMUM_VOLTAGE && state != BATTERY_FAILURE){
+//  if(2*analogRead(AKSHAY_PIN) < MINIMUM_VOLTAGE && state != BATTERY_FAILURE){
 //    voltCounter++;
 //    thisHit = 3;
 //    Serial.println(F("Volt Counter!"));
@@ -307,7 +305,7 @@ void stateSwitch() {
   if( prevHit != thisHit )
   {
     boundaryCounter = 0;
-    tempCounter = 0; 
+    //tempCounter = 0; 
     //voltCounter = 0;
   }
 

@@ -46,14 +46,14 @@ bool tempCheck() {
       return false ;       
   }
 
- /* if(!checkTempReading(t1) && checkTempReading(t2)){
+  /*if(!checkTempReading(t1) && checkTempReading(t2)){
     // if temp sensor 2 is working
     if(t2 < MIN_TEMP) {
-       cutReasonB = 0x50;
+       cutReasonA = 0x50;
        return true;
     }
     if(t2 > MAX_TEMP) {
-      cutReasonB = 0x60;
+      cutReasonA = 0x60;
       return true;
     }
     return false;       

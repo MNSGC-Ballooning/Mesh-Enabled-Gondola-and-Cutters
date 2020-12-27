@@ -29,17 +29,16 @@ void updateXbee() {                                 //The main function to call 
       case(0x03): break; //packet from a cutter A, ignored since this is a cutter
       case(0x04): break; //packet from a cutter B, ignored since this is a cutter
       case(0x05): break; //request to assign a cutter A to a gondola
-      case(0x06): { //request to assign a cutter B to a gondola
-        if(cutterBIdentifier == 0x02) {
+      case(0x06): {
+      if(cutterBIdentifier == 0x02) {
           cutterBIdentifier = xbee.read();
           downtimeG = millis()/1000.0;
         }
-        break;
-      }
+      break; }//request to assign a cutter B to a gondola
       default: while(xbee.available()>0) xbee.read();
     }
   }
- 
+
   if(((millis()/1000.0)-downtimeG)>waitForReconnection){
     cutterBIdentifier = 0x02;
   }
@@ -66,7 +65,7 @@ void sendData(){
   dataPacket.latitude = gps.getLat();
   dataPacket.longitude = gps.getLon();
   dataPacket.Altitude = gps.getAlt_feet();
-  dataPacket.volts = 2*analogRead(VOLTAGE_PIN);
+  dataPacket.volts = 2*analogRead(AKSHAY_PIN);
   dataPacket.t1 = t1;
   dataPacket.t2 = t2;
   dataPacket.cutStatus = cutStatusB;
@@ -135,13 +134,13 @@ void recieveTransmission() {
           Serial.print(F("DATA AVAILABLE!!!"));
           inputHolder[0] = xbee.read();
           inputHolder[1] = xbee.read();
-          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x41){
+          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x42){
             //Serial.println("loop");
             //Serial.println(inputHolder[0],HEX);
             inputHolder[0] = xbee.read();
             inputHolder[1] = xbee.read();
           }
-          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x41){
+          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x42){
             Serial.print(inputHolder[0],HEX);
             Serial.print(F(" "));
             Serial.print(inputHolder[1],HEX);

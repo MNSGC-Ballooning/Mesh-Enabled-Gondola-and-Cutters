@@ -1,5 +1,5 @@
 //============================================================================================================================================
-// MURI Resistor Cutter Box B
+// MURI Resistor Cutter Box A
 // Written by Steele Mitchell and PJ Collins - mitc0596 & coll0792 Spring 2020
 // XBee mesh written by Paul Wehling - wehli007 Fall 2020
 //============================================================================================================================================
@@ -31,6 +31,7 @@
 #include <Arduino.h>
 #include <RelayXBee.h>
 
+ 
 // Pin Definitions
 #define UBLOX_RX 0
 #define UBLOX_TX 1
@@ -44,7 +45,7 @@
 #define CUTTER_PIN4 3 // inactive
 #define HEAT_ON 12
 #define HEAT_OFF 13
-#define VOLTAGE_PIN A5
+#define AKSHAY_PIN A5
 #define THERMISTOR_A A0
 #define THERMISTOR_B A1 
 
@@ -88,10 +89,10 @@
 
 // Boundaries
 ///////CHANGE BEFORE EACH FLIGHT////////
-#define EASTERN_BOUNDARY -93.21           // longitudes
-#define WESTERN_BOUNDARY -96.84
-#define NORTHERN_BOUNDARY 44.17            // latitudes
-#define SOUTHERN_BOUNDARY 43.44
+#define EASTERN_BOUNDARY -93.06           // longitudes
+#define WESTERN_BOUNDARY -94.281
+#define NORTHERN_BOUNDARY 44.29            // latitudes
+#define SOUTHERN_BOUNDARY 43.94
 #define SLOW_DESCENT_CEILING 100000     // max altitude stack can reach before balloon is cut and stack enters slow descent state
 #define SLOW_DESCENT_FLOOR 80000        // min altitude for the slow descent state
 #define INIT_ALTITUDE 2000              // altitude at which the state machine begins
@@ -167,7 +168,7 @@ SoftwareSerial xbeeSerial(Xbee_RX, Xbee_TX);        //Initializes the xbee seria
 RelayXBee xbee = RelayXBee(&xbeeSerial,xbeeID);     //Creates XBee Object
 byte cutterBIdentifier = 0x02;                      //Holds the gondola's individual ID, set during xbeeStartup()
 byte connectedG = 0x00;                             //ID of the gondola the cutter is connected to
-short downtimeG = 0;                                //Holds the millis time (secs) of last successful transmission. If goes over 30 secs since last, cutter resets name and listens for gondola
+unsigned long downtimeG = 0;                                //Holds the millis time (secs) of last successful transmission. If goes over 30 secs since last, cutter resets name and listens for gondola
 struct data{                                 // FOR OUTGOING DATA
   uint8_t startByte;
   uint8_t cutterTag;
@@ -196,7 +197,7 @@ struct input{                                // FOR INCOMING DATA
 }inputPacket;
 
 // Autonomous operation variables
-long timeOut;
+unsigned long timeOut;
 bool autonomousNow = false;
 uint8_t counterZero = 0; 
 uint8_t counterOne = 0;
@@ -248,7 +249,7 @@ void loop() {
     Serial.print(F(", "));
     Serial.print(t2);
     Serial.print(F(", "));
-    Serial.println(2*analogRead(VOLTAGE_PIN));
+    Serial.println(2*analogRead(AKSHAY_PIN));
 
     // Add this for thermal vac test
 //     if (millis() - testStamp > 5*M2MS && once == 1){
@@ -263,7 +264,7 @@ void loop() {
 
     updateXbee();
     timeOut = millis()-(downtimeG*1000);
-    if( timeOut > 1*M2MS){ // change to desired max disconnect time
+     if( timeOut > 1*M2MS){ // change to desired max disconnect time
       autonomousNow = true;
       Serial.println(F("Autonomous Mode ON"));
     }
