@@ -1,16 +1,3 @@
-// State machine functions for the cutaway system
-
-#define INITIALIZATION 0x00   // corresponding hex values are chosen so as to avoid bit-flipping in the stratosphere
-#define ASCENT 0x01
-#define SLOW_ASCENT 0x02
-#define SLOW_DESCENT 0x04
-#define DESCENT 0x08
-#define FLOAT 0x10
-#define OUT_OF_BOUNDARY 0x20
-#define TEMPERATURE_FAILURE 0x40
-#define BATTERY_FAILURE 0x60
-#define RECOVERY 0x80
-
 // CUT REASON KEY
 // Ascent Timer ran out 0x00
 // Termination altitude reached 0x01
@@ -24,302 +11,329 @@
 // Reached southern boundary 0x40
 // Below min temp 0x50
 // Above max temp 0x60
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+///////////////////////////////DETERMINATION///////////////////////////////////////////////////////////////
+void Determination(){
+  // takes in GPS data, pressure data, and current time
+  // if GPS is valid, uses GPS to determine lat, long, alt, and AR
+  // if GPS is not valid but pressure is, calculates altitude and AR (below 80000ft)
+  // if neither are valid, and above floor with at least 10 good previous GPS hits, use linear progression
+  // if below floor with bad GPS, throws error
+  // uses hex indication as to whether it is using GPS, pressure, or linear progression
 
-void stateMachine() {
-  static bool initDone = false;
-  static byte initCounter = 0;
-
-  // ensure the state machine does not start until a certain intial altitude is reached
-  if(!initDone && fixStatus[0] == FIX) {
-    state = INITIALIZATION;
-    stateString = F("Initialization");
-    if(alt[0] > INIT_ALTITUDE) {
-      initCounter++;
-      if(initCounter >= 40) {
-        initCounter = 0;
-        Serial.println(F("Initialized"));
-        initDone = true; 
-      }
-    }
-    if(alt[0] < INIT_ALTITUDE){
-      initCounter = 0;
-    }
+  if (fixStatus[0] == FIX && fixStatus[9] == FIX){ // have compareGPS return a bool - true if GPS data is good, false if not (all 3 GPS fail) SET DETDATA.USAGE TO 1, 2, or 3 in COMPAREGPS FUNCTION
+    
+    detData.alt = GPSdata.alt;
+    detData.latitude = GPSdata.latitude;
+    detData.longitude = GPSdata.longitude;
+    detData.AR = GPSdata.AR;
+    
   }
 
-  // run state switch function if the state machine is intialized
-  if (initDone && fixStatus[0] == FIX) { 
-    stateSwitch();
-  }
-
-  
-  // run functions based off of the current state
-  switch(state) {
-    ///// Ascent /////
-    case 0x01:
-      stateString = F("Ascent");
-
-      static unsigned long ascentStamp = millis();
-
-      // cut balloon A if the ascent timer runs out
-      if(millis() - ascentStamp > ASCENT_INTERVAL*M2MS) {
-        requestCut();
-        cutReasonA = 0x00;
-      }
-      // cut balloon A if the termination altitude is reached
-      if (alt[0] > SLOW_DESCENT_CEILING) {
-        requestCut();
-        cutReasonA = 0x01;
-      }
-
-      break;
-
-    ///// Slow Ascent /////
-    case 0x02:
-      stateString = F("Slow Ascent");
-
-      // cut both balloons as the stack is ascending too slowly
-      requestCut();
-      cutReasonA = 0x02;
-
-      break;
-
-    ///// Slow Descent /////   
-    case 0x04:
-      // organize timing schema for slow descent state
-      stateString = F("Slow Descent");
-
-      static unsigned long slowDescentStamp = millis(); // initializaed upon first time in this state
-      static byte SDTerminationCounter = 0;
-
-      if(millis() - slowDescentStamp > SLOW_DESCENT_INTERVAL*M2MS || (alt[0] < SLOW_DESCENT_FLOOR && alt[0] != 0)) {
-        SDTerminationCounter++;
-
-        if(SDTerminationCounter >= 40 && (millis() - slowDescentStamp >= SLOW_DESCENT_BUFFER*M2MS) ) {
-          requestCut();
-          cutReasonA = 0x03;
-        }
-      }
-
-      break;
-
-    ///// Descent /////
-    case 0x08:
-      // do nothing but note state
-      stateString = F("Descent");
-
-      static byte floorAltitudeCounter = 0;   // increments if the stack is below the slow descent altitude floor
-      static bool cutCheck = false;
-
-      if(alt[0] < SLOW_DESCENT_FLOOR && alt[0] != 0) {
-        floorAltitudeCounter++;
-
-        if(floorAltitudeCounter >= 40 && !cutCheck) {
-          floorAltitudeCounter = 0;
-
-          requestCut();
-          cutReasonA = 0x03;
-        }
-      }
-
-      break;
-
-    ///// Float /////
-    case 0x10:
-      // abort flight
-      stateString = F("Float");
-
-      // cut both balloons as the stack is in a float state
-      requestCut();
-      cutReasonA = 0x04;      
-
-      break;
-
-    ///// Out of Boundary /////
-    case 0x20:
-      // cut resistor and note state
-      stateString = F("Out of Boundary");
-      
-      // cut both balloons as the stack is out of the predefined flight boundaries
-      requestCut();
-      // cut reasons are more specifically defined in the boundaryCheck() function
-
-      break;
-
-    ///// Temperature Failure /////
-//    case 0x40:
-//      // cut resistor and note state
-//      stateString = F("Temperature Failure");
-//
-//      // cut balloon as temps are at critical levels
-//      cutResistorOnA(); // rather than requestCut, as this cannot be confirmed by main
-//
-//      // cut reasons defined within tempCheck() function
-//
-//      break;
-
-    ///// Battery Failure /////
-//    case 0x60:
-//
-//      stateString = F("Battery failure");
-//      // only cut A, so slow descent can be entered
-//      
-//      cutResistorOnA();
-//      cutReasonA = 0x05;
-//      
-//      break;
-
-    ///// Recovery /////
-    case 0x80:
-      // reserved for any functions near the ground
-      stateString = F("Recovery");
-
-      break;
-
+  else{
+    // THIS WILL NEVER TRIGGER AS IS
+    Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
+    detData.Usage = 0x00; // indicates error
+    // have LED indication
   }
   
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/////////////////////////////////////CONTROL////////////////////////////////////////////////////////////////////////////
+void Control(){
+  // uses detData to determine what state it thinks we should be in
+  // worst case states take priority, but every possible state is outputted as hex
 
-void stateSwitch() {
-  // initialize all counters as static bytes that begin at zero
-  static byte ascentCounter = 0,  slowAscentCounter = 0,  descentCounter = 0, slowDescentCounter = 0, recoveryCounter = 0, boundaryCounter = 0;
-  static byte tempCounter = 0; static byte voltCounter = 0;
-  static uint16_t floatCounter = 0;
-
-  if(stateSwitched) {     // reset all state counters if the state was just switched
-    ascentCounter = 0;  slowAscentCounter = 0;  descentCounter  = 0;  slowDescentCounter = 0;   floatCounter  = 0; recoveryCounter = 0;  boundaryCounter = 0;
-    tempCounter = 0; 
-    stateSwitched = false;
+  if (detData.AR>=375){
+    stateSuggest = ASCENT;
   }
-  if(ascentRate > MAX_SA_RATE && state != ASCENT) {
-    ascentCounter++;
-    Serial.println(F("Ascent Counter!"));
-    if(ascentCounter >= 40) {
-      state = ASCENT;
-      ascentCounter = 0;
-      Serial.println(F("ASCENT"));
-      stateSwitched = true;
-    }
+  if (detData.AR<375 && detData.AR>=100){
+    stateSuggest = SLOW_ASCENT;
   }
-  else if(ascentRate <= MAX_SA_RATE && ascentRate > MAX_FLOAT_RATE && state != SLOW_ASCENT && alt[0] < 30000) {
-    slowAscentCounter++;
-    Serial.println(F("Slow Ascent Counter!"));
-    if(slowAscentCounter >= 40) {
-      state = SLOW_ASCENT;
-      slowAscentCounter = 0;
-      Serial.println(F("SLOW ASCENT"));
-      stateSwitched = true;
-    }
+  if (detData.AR<100 && detData.AR>-100){
+    stateSuggest = FLOAT;
   }
-  else if(ascentRate <= MAX_FLOAT_RATE && ascentRate >= MIN_FLOAT_RATE && state != FLOAT) {
-    floatCounter++;
-    Serial.println(F("Float Counter!"));
-    if(floatCounter >= 1800) {
-      state = FLOAT;
-      floatCounter = 0;
-      Serial.println(F("FLOAT"));
-      stateSwitched = true;
-    }
+  if (detData.AR<=-100 && detData.AR>-375){
+    stateSuggest = SLOW_DESCENT;
   }
-  else if(ascentRate < MIN_FLOAT_RATE && ascentRate >= MIN_SD_RATE && state != SLOW_DESCENT) {
-    slowDescentCounter++;
-    Serial.println(F("Slow Descent Counter!"));
-    if(slowDescentCounter >= 40) {
-      state = SLOW_DESCENT;
-      slowDescentCounter = 0;
-      slowBuffer = millis();
-      Serial.println(F("SLOW DESCENT"));
-      stateSwitched = true;
-    }
-  }
-  else if(ascentRate < MIN_SD_RATE && state !=DESCENT) {
-    descentCounter++;
-    Serial.println(F("Descent Counter!"));
-    if(descentCounter >= 40) {
-      state = DESCENT;
-      descentCounter = 0;
-      Serial.println(F("DESCENT"));
-      stateSwitched = true;
-    }
-  }
-  else if(state != RECOVERY && (state == DESCENT || state == SLOW_DESCENT) && alt[0] < RECOVERY_ALTITUDE) {
-    recoveryCounter++;
-    Serial.println(F("Recovery Counter!"));
-    if(recoveryCounter >= 40) {
-      state = RECOVERY;
-      recoveryCounter = 0;
-      Serial.println(F("RECOVERY"));
-      stateSwitched = true;
-    }
+  if (detData.AR<=375){
+    stateSuggest = DESCENT;
   }
 
-  // part of a separate series of if/else statements as criteria for this state is different
-  if(boundaryCheck() && state != OUT_OF_BOUNDARY) {
-    boundaryCounter++;
-    thisHit = 1;
-    Serial.println(F("Boundary Counter!"));
-    if(boundaryCounter >= 40) {
-      state = OUT_OF_BOUNDARY;
-      Serial.println(F("OUT OF BOUND"));
-      boundaryCounter = 0;
-      stateSwitched = true;
-    }
-  } 
-//
-//  if(tempCheck() && state != TEMPERATURE_FAILURE){
-//    tempCounter++;
-//    thisHit = 2;
-//    Serial.println(F("Temp Counter!"));
-//    if(tempCounter >= 40) {
-//      state = TEMPERATURE_FAILURE;
-//      Serial.println(F("TEMP FAILURE"));
-//      tempCounter = 0;
-//      stateSwitched = true;
-//    }
-//  }
-//  if(2*analogRead(AKSHAY_PIN) < MINIMUM_VOLTAGE && state != BATTERY_FAILURE){
-//    voltCounter++;
-//    thisHit = 3;
-//    Serial.println(F("Volt Counter!"));
-//    if (voltCounter >= 40) {
-//      state = BATTERY_FAILURE;
-//      voltCounter = 0;
-//      Serial.println(F("BATTERY FAILURE"));
-//      stateSwitched = true;
-//    }
-//  }
-
-  // if two or more counters are greater than 0, reset all counters
-  // resets counters if non-consecutive
-  uint8_t statesHit = 0;
-  if( ascentCounter > 0 ) statesHit++;
-  if( slowAscentCounter > 0 ) statesHit++;
-  if( descentCounter > 0 ) statesHit++;
-  if( slowDescentCounter > 0 ) statesHit++;
-  if( recoveryCounter > 0 ) statesHit++;
-  //if( boundaryCounter > 0 ) statesHit++;
-  //if( tempCounter > 0 ) statesHit++;
-  //if( voltCounter > 0 ) statesHit++;
-  if( floatCounter > 0 ) statesHit++;
-  if( statesHit >= 2 ){
-    ascentCounter = 0;
-    slowAscentCounter = 0;
-    descentCounter = 0;
-    slowDescentCounter = 0;
-    recoveryCounter = 0;
-    //boundaryCounter = 0;
-    //tempCounter = 0; 
-    //voltCounter = 0;
-    floatCounter = 0;
+  /*if (tempfailure){
+    stateSuggest = TEMP_FAILURE;
   }
 
-  if( prevHit != thisHit )
-  {
-    boundaryCounter = 0;
-    //tempCounter = 0; 
-    //voltCounter = 0;
+  if (batteryFailure){
+    stateSuggest = BATTERY_FAILURE;
+  }*/
+
+  if ((detData.longitude > EASTERN_BOUNDARY) || (detData.longitude < WESTERN_BOUNDARY) || (detData.latitude >NORTHERN_BOUNDARY) || (detData.latitude < SOUTHERN_BOUNDARY)){
+    stateSuggest = OUT_OF_BOUNDS;  
   }
 
-  prevHit = thisHit;
+  if (detData.Usage == 0x00){ // error state
+    stateSuggest = ERROR_STATE; // doesn't exist - State will go to default
+  }
+
+  if (millis() > MASTER_TIMER){
+    stateSuggest = PAST_TIMER;
+  }
+
+  
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////STATE/////////////////////////////////////////////////////////////////
+void State(){
+  // take in stateSuggest from control and switches into that state after a predetermined number of hits
+  switch (stateSuggest){
+    ////ASCENT////
+    case ASCENT:
+    
+      if (currentState!=ASCENT){ // criteria for entering Ascent functionality
+        ascentCounter += 1; // increment ascent counter
+        SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (ascentCounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = ASCENT;
+          ascentStamp = millis();
+        }
+      }
+
+      if (currentState==ASCENT){ // operations while in ascent
+        
+        if (detData.alt > ALTITUDE_CEILING || millis()-ascentStamp >= ASCENT_TIMER){ // if ceiling or timer is reached
+          cutResistorOnA(); // only cuts A (large balloon) so slow descent can still be acheived
+        }
+      }
+
+    ////SLOW ASCENT////
+    case SLOW_ASCENT:
+    
+      if (currentState!=SLOW_ASCENT){ // criteria for entering Slow Ascent functionality
+          SAcounter += 1; // increment slow ascent counter
+          ascentCounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+          tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+          
+          if (SAcounter >= 60 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 60 consecutive state suggestions
+            currentState = SLOW_ASCENT;
+            SAstamp = millis();
+          }
+        }
+  
+        if (currentState==SLOW_ASCENT){ // operations while in slow ascent
+          
+          if (detData.alt > ALTITUDE_CEILING || millis()-SAstamp >= SA_TIMER){ // if ceiling or timer is reached
+            cutResistorOnA(); // cut only A to enter slow descent
+          }
+
+          if (detData.alt < SA_FLOOR){ // cuts immediately under threshold
+            cutResistorOnA(); // only cuts A (large balloon) so some slow descent can still be acheived
+          }
+        }
+
+    ////FLOAT////
+    case FLOAT:
+
+      if (currentState!=FLOAT){ // criteria for entering Float functionality
+        floatCounter += 1; // increment float counter
+        ascentCounter =0, SAcounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (ascentCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
+          currentState = FLOAT;
+          floatStamp = millis();
+        }
+      }
+
+      if (currentState==FLOAT){ // operations while in float
+        
+        if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
+          cutResistorOnA(); // cut only A to attempt to enter slow descent
+        }
+
+        if (millis()-floatStamp >= FLOAT_TIMER){ // if timer reached
+          cutResistorOnA(); // cut both balloons
+        }
+      }
+
+    ////SLOW DESCENT////
+    case SLOW_DESCENT:
+
+      if (currentState!=SLOW_DESCENT){ // criteria for entering Slow Descent functionality
+        SDcounter += 1; // increment slow descent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (SDcounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = SLOW_DESCENT;
+          SDstamp = millis();
+        }
+      }
+
+      if (currentState==SLOW_DESCENT){ // operations while in slow descent
+        
+        if (detData.alt < SLOW_DESCENT_FLOOR || millis()-SDstamp >= SLOW_DESCENT_TIMER){ // if floor or timer is reached
+          cutResistorOnA(); // cut both balloons (A is likely cut already, but just in case)
+        }
+      }
+
+
+    ////DESCENT////
+    case DESCENT:
+    
+      if (currentState!=DESCENT){ // criteria for entering Descent functionality
+        descentCounter += 1; // increment descent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0;
+        tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (descentCounter >= 30 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 30 consecutive state suggestions
+          currentState = DESCENT;
+          descentStamp = millis();
+        }
+      }
+
+      if (currentState==DESCENT){ // operations while in ascent
+        
+        if (millis()-ascentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
+          cutResistorOnA(); // cut both balloons
+        }
+      }
+
+    ////TEMPERATURE FAILURE//// To be added later... REVIEW AND ADJUST BEFORE USING
+    /* case TEMP_FAILURE:
+    
+      if (currentState!=TEMP_FAILURE){ // criteria for entering Temperature Failure functionality
+        tempCounter += 1; // increment temperature failure counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+      }
+
+      if (currentState==TEMP_FAILURE){ // operations while in temperature failure
+        cutResistorOnA();
+        cutResistorOnB();
+      }*/
+
+    ////BATTERY FAILURE////To be added later... REVIEW AND ADJUST BEFORE USING
+    /*case BATTERY_FAILURE:
+      if (currentState!=BATTERY_FAILURE){ // criteria for entering Battery Failure functionality
+        battCounter += 1; // increment battery failure counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+      }
+
+      if (currentState==BATTERY_FAILURE){ // operations while in battery failure
+        cutResistorOnA();
+        cutResistorOnB();
+      }*/
+        
+    ////OUT OF BOUNDARY////
+    case OUT_OF_BOUNDS:
+    
+      if (currentState!=OUT_OF_BOUNDS){ // criteria for entering Out of Boundary functionality
+        boundCounter += 1; // increment out of boundary counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, timerCounter = 0; // reset all other state counters
+        
+        if (boundCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
+          currentState = OUT_OF_BOUNDS;
+        }
+      }
+
+      if (currentState==OUT_OF_BOUNDS){ // operations while out of boundary
+        cutResistorOnA(); // cut both balloons
+      }
+
+    ////MASTER TIMER REACHED////
+    case PAST_TIMER:
+
+      if (currentState!=PAST_TIMER){ // criteria for entering Master Timer Reached functionality
+        timerCounter += 1; // increment ascent counter
+        ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
+        tempCounter = 0, battCounter = 0, boundCounter = 0; // reset all other state counters
+        
+        if (timerCounter >= 10){ // activates after 10 consecutive state suggestions, regardless of altitude
+          currentState = PAST_TIMER;
+        }
+      }
+
+      if (currentState==PAST_TIMER){ // operations after Master Timer reached
+        
+        cutResistorOnA();
+        // wait to cut B (hopefully to get slow descent data)
+      }
+
+      break;
+
+    ////DEFAULT////
+    default: 
+
+    // move outside of switch-case
+    // has to get through initialization to trigger states
+    // if initialization never triggers, moves to the next of the function where it cuts A then B
+
+      if (currentState==INITIALIZATION){ // currentState is initialized as INITIALIZATION, no other states have been activated
+
+        defaultStamp = millis();
+        if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
+
+         cutResistorOnA();
+         // wait to cut B (hopefully to get slow descent data)
+        }
+
+        else {
+          // if it's not in initialization, means it entered another state at some point, then everything stopped working and stateSuggest = ERROR_STATE now
+          // should wait a while to see if it will enter a state again, then do the same cut strategy, hoping for some slow descent
+          defaultStamp2 = millis();
+          if ( (millis()-defaultStamp2) >= (DEFAULT_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave default
+
+            cutResistorOnA();
+            // wait to cut B (hopefully to get slow descent data)
+            }
+        }
+        
+  }
+}
+}
+
+void printState(){
+  switch (currentState){
+    case ASCENT: 
+      Serial.println("ASCENT");
+      break;
+    case INITIALIZATION:
+      Serial.println("INITIALIZATION");
+      break;
+    case SLOW_ASCENT:
+      Serial.println("SLOW_ASCENT");
+      break;
+    case FLOAT:
+      Serial.println("FLOAT");
+      break;
+    case SLOW_DESCENT:
+      Serial.println("SLOW_DESCENT");
+      break;
+    case DESCENT:
+      Serial.println("DESCENT");
+      break;
+    case TEMP_FAILURE:
+      Serial.println("TEMP_FAILURE");
+      break;
+    case BATTERY_FAILURE:
+      Serial.println("BATTERY_FAILURE");
+      break;
+    case OUT_OF_BOUNDS:
+      Serial.println("OUT_OF_BOUNDS");
+      break;
+    case PAST_TIMER:
+      Serial.println("PAST_TIMER");
+      break;
+    case ERROR_STATE:
+      Serial.println("ERROR_STATE");
+      break;
+  }
 }

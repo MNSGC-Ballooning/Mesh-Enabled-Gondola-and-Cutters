@@ -71,7 +71,7 @@ void sendData(){
   dataPacket.t2 = t2;
   dataPacket.cutStatus = cutStatusA;
   dataPacket.heatStatus = heatStatus;
-  dataPacket.currentState = state;
+  dataPacket.currentState = currentState;
   dataPacket.cutReason = cutReasonA;
   dataPacket.checksum = 0;
   dataPacket.stopByte = 0x53;

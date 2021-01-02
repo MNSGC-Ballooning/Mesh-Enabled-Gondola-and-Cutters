@@ -44,6 +44,7 @@ void updateTelemetry() {
       ascentRate = getAscentRate(alt[0],alt[9],timeStamp[0],timeStamp[9]);
       groundSpeed = getGroundSpeed(latitude[0],latitude[9],longitude[0],longitude[9],timeStamp[0],timeStamp[9]);
       heading = getHeading(latitude[0],latitude[9],longitude[0],longitude[9]);
+      detData.Usage = 0x01;
     }
   }
   else {
@@ -51,7 +52,12 @@ void updateTelemetry() {
     latitude[0] = getNextLat(latitude[1],heading,dt,groundSpeed);
     longitude[0] = getNextLong(longitude[1],latitude[1],heading,dt,groundSpeed);
     alt[0] = getNextAlt(ascentRate,dt,alt[1]);
+    detData.Usage = 0x05;
   }
+  GPSdata.alt = alt[0];
+  GPSdata.latitude = latitude[0];
+  GPSdata.longitude = longitude[0];
+  GPSdata.AR = ascentRate;
 }
   
 
