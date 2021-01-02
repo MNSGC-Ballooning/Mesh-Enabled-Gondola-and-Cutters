@@ -1,5 +1,5 @@
 //============================================================================================================================================
-// MURI Resistor Cutter Box A
+// MURI Resistor Cutter Box B
 // Written by Steele Mitchell and PJ Collins - mitc0596 & coll0792 Spring 2020
 // XBee mesh written by Paul Wehling - wehli007 Fall 2020
 //============================================================================================================================================
@@ -58,18 +58,16 @@
 
 
 // Intervals
-// #define FIX_INTERVAL 5000               // GPS with a fix—will flash for 5 seconds
-// #define NOFIX_INTERVAL 2000             // GPS with no fix—will flash for 2 seconds
-//#define TEST_INTERVAL 30*60000          // Interval to test cutters - uncomment for thermal vac test!
+#define MASTER_TIMER 180*M2MS
+#define ASCENT_TIMER 150*M2MS
+#define SA_TIMER 30*M2MS
+#define FLOAT_TIMER 30*M2MS
+#define SLOW_DESCENT_TIMER 40*M2MS
+#define INITIALIZATION_TIME 25*M2MS
+#define DEFAULT_TIME 30*M2MS
 #define LED_INTERVAL 1000               // LEDs run on a 1 second loop to indicate lack of connection
 #define UPDATE_INTERVAL 1000            // update all data and the state machine every 1 second
 #define CUT_INTERVAL 120000              // ensure the cutting mechanism is on for 2 minutes
-#define MASTER_INTERVAL 210             // master timer that cuts balloon after 3hr, 30min
-//#define PRESSURE_TIMER_INTERVAL 50      // timer that'll cut the balloon 50 minutes after pressure reads 70k feet
-#define ASCENT_INTERVAL 180             // timer that cuts balloon A 3 hours after ASCENT state initializes
-#define SLOW_DESCENT_INTERVAL 60        // timer that cuts both balloons (as a backup) an hour after SLOW_DESCENT state initializes
-#define SLOW_DESCENT_BUFFER 10          // timer that ensures slow descent state is maintained for 10 minutes
-//#define HEAT_INTERVAL 5
 
 // Constants
 #define PA_TO_ATM 1/101325              // PSI to ATM conversion ratio
@@ -88,15 +86,16 @@
 
 
 // Boundaries
-///////CHANGE BEFORE EACH FLIGHT////////
-#define EASTERN_BOUNDARY -93.06           // longitudes
-#define WESTERN_BOUNDARY -94.281
-#define NORTHERN_BOUNDARY 44.29            // latitudes
-#define SOUTHERN_BOUNDARY 43.94
-#define SLOW_DESCENT_CEILING 100000     // max altitude stack can reach before balloon is cut and stack enters slow descent state
-#define SLOW_DESCENT_FLOOR 80000        // min altitude for the slow descent state
-#define INIT_ALTITUDE 2000              // altitude at which the state machine begins
-#define RECOVERY_ALTITUDE 5000          // altitude at which the recovery state intializes on descent
+#define ALTITUDE_FLOOR 5000
+#define ALTITUDE_CEILING 100000
+#define SA_FLOOR 50000
+#define SLOW_DESCENT_FLOOR 80000
+////change lat and long boundaries before every flight!!!////
+#define EASTERN_BOUNDARY 90
+#define WESTERN_BOUNDARY 90
+#define SOUTHERN_BOUNDARY 90
+#define NORTHERN_BOUNDARY 90
+/////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature
 #define LOW_TEMP -5                     // activation temp for heating pads
@@ -108,6 +107,19 @@
 #define MAX_FLOAT_RATE 100              // maximum velocity that corresponds to a float state, or minimum for a slow ascent state
 #define MIN_FLOAT_RATE -100             // minimum velocity that corresponds to a float state, or maximum for a slow descent state
 #define MIN_SD_RATE -600                // minimum velocity that corresponds to a slow desent state
+
+// States
+#define INITIALIZATION 0x00
+#define ASCENT 0x01
+#define SLOW_ASCENT 0x02
+#define FLOAT 0x03
+#define SLOW_DESCENT 0x04
+#define DESCENT 0x05
+#define TEMP_FAILURE 0x06
+#define BATTERY_FAILURE 0x07
+#define OUT_OF_BOUNDS 0x08
+#define PAST_TIMER 0x09
+#define ERROR_STATE 0x10
 
 // #define PRESSURE_TIMER_ALTITUDE 70000   // altitude at which the pressure timer begins
 
@@ -130,15 +142,26 @@ unsigned long slowBuffer = 0;
 unsigned long testStamp = 0;
 
 // State Machine
-uint8_t state; 
-bool stateSwitched;
-bool maxAltReached = false;
+struct DetData{ // proposed struct filled out by Determination
+  float alt;
+  float latitude;
+  float longitude;
+  float AR;
+  float pressure;
+  float Time; 
+  uint8_t Usage; // 00 means using timer (error on all others), 01 means using GPS, 05 using linear progression
+} detData;
+
+uint8_t ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0;
+uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0;
+unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, SDstamp = 0, descentStamp = 0;
+unsigned long timerStampCutA = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0;
+
+uint8_t currentState = INITIALIZATION; // state we are in, starts as initialization
+uint8_t stateSuggest; // state recommended by control
+uint8_t cutReasonB;
 uint8_t cutStatusB = 0x01; // 1 for false, 2 for true
 bool cutterOnB = false;
-uint8_t cutReasonB;
-String stateString;
-uint8_t prevHit = 1;
-uint8_t thisHit = 1;
 
 // GPS Variables
 UbloxGPS gps(&Serial);
@@ -153,6 +176,13 @@ float groundSpeed;
 float heading;
 uint8_t sats;
 bool LEDOn = false, LED2On = false;
+
+struct GPSData{ // proposed struct filled out by compareGPS
+  float alt;
+  float latitude;
+  float longitude;
+  float AR;
+} GPSdata;
 
 // active heating variables
 float sensTemp;
@@ -236,9 +266,12 @@ void loop() {
 
     updateTelemetry();  // update GPS data
 
-    stateMachine();     // update the state machine
+    Determination();
+    Control();
+    State(); // these three update the state machine
+    
     Serial.print(F("State: "));
-    Serial.println(stateString);
+    printState();
 
     Serial.print(F("Lat & long: "));
     Serial.print(latitude[0]);
@@ -255,7 +288,7 @@ void loop() {
 //     if (millis() - testStamp > 5*M2MS && once == 1){
 //       testStamp = millis();
 //       once++;
-//       cutResistorOnA();
+//       cutResistorOnB();
 //     }
      
     sendData();         // send current data to main
@@ -271,7 +304,7 @@ void loop() {
   }
 
   // cut balloon if the master timer expires
-  if(millis() > MASTER_INTERVAL*M2MS) {
+  if(millis() > MASTER_TIMER*M2MS) {
     cutResistorOnB();
     cutReasonB = F("master timer expired");
   }
