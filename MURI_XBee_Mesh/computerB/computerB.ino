@@ -58,13 +58,13 @@
 
 
 // Intervals
-#define MASTER_TIMER 180*M2MS
-#define ASCENT_TIMER 150*M2MS
-#define SA_TIMER 30*M2MS
-#define FLOAT_TIMER 30*M2MS
-#define SLOW_DESCENT_TIMER 40*M2MS
-#define INITIALIZATION_TIME 25*M2MS
-#define DEFAULT_TIME 30*M2MS
+#define MASTER_TIMER 180*M2MS       // 180 standard
+#define ASCENT_TIMER 150*M2MS       // 150 standard
+#define SA_TIMER 20*M2MS            // 20 standard
+#define FLOAT_TIMER 30*M2MS         // 30 standard
+#define SLOW_DESCENT_TIMER 0.5*M2MS  // 40 standard
+#define INITIALIZATION_TIME 25*M2MS // 25 standard 
+#define DEFAULT_TIME 30*M2MS        // 30 standard
 #define LED_INTERVAL 1000               // LEDs run on a 1 second loop to indicate lack of connection
 #define UPDATE_INTERVAL 1000            // update all data and the state machine every 1 second
 #define CUT_INTERVAL 120000              // ensure the cutting mechanism is on for 2 minutes
@@ -84,17 +84,16 @@
 #define NOFIX 0x00
 #define FIX 0x01
 
-
 // Boundaries
-#define ALTITUDE_FLOOR 5000
-#define ALTITUDE_CEILING 100000
-#define SA_FLOOR 50000
-#define SLOW_DESCENT_FLOOR 80000
+#define ALTITUDE_FLOOR 5000 // standard 5000
+#define ALTITUDE_CEILING 100000 // standard 100000
+#define SA_FLOOR 50000 // standard 50000
+#define SLOW_DESCENT_FLOOR 80000 // standard 80000
 ////change lat and long boundaries before every flight!!!////
-#define EASTERN_BOUNDARY 90
-#define WESTERN_BOUNDARY 90
-#define SOUTHERN_BOUNDARY 90
-#define NORTHERN_BOUNDARY 90
+#define EASTERN_BOUNDARY 900
+#define WESTERN_BOUNDARY -900
+#define SOUTHERN_BOUNDARY -900
+#define NORTHERN_BOUNDARY 900
 /////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature
@@ -153,7 +152,7 @@ struct DetData{ // proposed struct filled out by Determination
 } detData;
 
 uint8_t ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0;
-uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0;
+uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0, initCounter = 1;
 unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, SDstamp = 0, descentStamp = 0;
 unsigned long timerStampCutA = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0;
 
@@ -304,9 +303,9 @@ void loop() {
   }
 
   // cut balloon if the master timer expires
-  if(millis() > MASTER_TIMER*M2MS) {
+  if(millis() > MASTER_TIMER) {
     cutResistorOnB();
-    cutReasonB = F("master timer expired");
+    cutReasonB = 0x70;
   }
 
   if(millis() - cutStampB > CUT_INTERVAL && cutterOnB) cutResistorOffB();

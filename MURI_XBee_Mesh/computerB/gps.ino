@@ -53,6 +53,8 @@ void updateTelemetry() {
     longitude[0] = getNextLong(longitude[1],latitude[1],heading,dt,groundSpeed);
     alt[0] = getNextAlt(ascentRate,dt,alt[1]);
     detData.Usage = 0x05;
+    Serial.print("Using Linear Regression: Alt = ");
+    Serial.print(alt[0]);
   }
   GPSdata.alt = alt[0];
   GPSdata.latitude = latitude[0];

@@ -11,6 +11,7 @@
 // Reached southern boundary 0x40
 // Below min temp 0x50
 // Above max temp 0x60
+// Master timer reached 0x70
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////DETERMINATION///////////////////////////////////////////////////////////////
@@ -30,13 +31,13 @@ void Determination(){
     detData.AR = GPSdata.AR;
     
   }
+  else Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
 
-  else{
-    // THIS WILL NEVER TRIGGER AS IS
-    Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
+  if (detData.Usage!=0x05 && detData.Usage!=0x01){
+    // THIS WILL IDEALLY NEVER TRIGGER
     detData.Usage = 0x00; // indicates error
-    // have LED indication
   }
+  
   
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +75,10 @@ void Control(){
     stateSuggest = OUT_OF_BOUNDS;  
   }
 
+  if (detData.alt < ALTITUDE_FLOOR){
+    stateSuggest = INITIALIZATION;
+  }
+
   if (detData.Usage == 0x00){ // error state
     stateSuggest = ERROR_STATE; // doesn't exist - State will go to default
   }
@@ -81,7 +86,6 @@ void Control(){
   if (millis() > MASTER_TIMER){
     stateSuggest = PAST_TIMER;
   }
-
   
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -92,7 +96,8 @@ void State(){
   switch (stateSuggest){
     ////ASCENT////
     case ASCENT:
-    
+
+      Serial.println("Suggested State: Ascent");
       if (currentState!=ASCENT){ // criteria for entering Ascent functionality
         ascentCounter += 1; // increment ascent counter
         SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -110,10 +115,12 @@ void State(){
 //          cutResistorOnA(); // only cuts A (large balloon) so slow descent can still be acheived
 //        }
       }
+      break;
 
     ////SLOW ASCENT////
     case SLOW_ASCENT:
-    
+
+      Serial.println("Suggested State: Slow Ascent");
       if (currentState!=SLOW_ASCENT){ // criteria for entering Slow Ascent functionality
           SAcounter += 1; // increment slow ascent counter
           ascentCounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -135,10 +142,12 @@ void State(){
 //            cutResistorOnA(); // only cuts A (large balloon) so some slow descent can still be acheived
 //          }
         }
+        break;
 
     ////FLOAT////
     case FLOAT:
 
+      Serial.println("Suggested State: Float");
       if (currentState!=FLOAT){ // criteria for entering Float functionality
         floatCounter += 1; // increment float counter
         ascentCounter =0, SAcounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -160,10 +169,12 @@ void State(){
           cutResistorOnB(); // cut both balloons
         }
       }
+      break;
 
     ////SLOW DESCENT////
     case SLOW_DESCENT:
 
+      Serial.println("Suggested State: Slow Descent");
       if (currentState!=SLOW_DESCENT){ // criteria for entering Slow Descent functionality
         SDcounter += 1; // increment slow descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0; 
@@ -181,11 +192,13 @@ void State(){
           cutResistorOnB(); // cut both balloons (A is likely cut already, but just in case)
         }
       }
+      break;
 
 
     ////DESCENT////
     case DESCENT:
-    
+
+      Serial.println("Suggested State: Descent");
       if (currentState!=DESCENT){ // criteria for entering Descent functionality
         descentCounter += 1; // increment descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0;
@@ -203,6 +216,8 @@ void State(){
           cutResistorOnB(); // cut both balloons
         }
       }
+
+      break;
 
     ////TEMPERATURE FAILURE//// To be added later... REVIEW AND ADJUST BEFORE USING
     /* case TEMP_FAILURE:
@@ -233,7 +248,8 @@ void State(){
         
     ////OUT OF BOUNDARY////
     case OUT_OF_BOUNDS:
-    
+
+      Serial.println("Suggested State: Out of Bounds");
       if (currentState!=OUT_OF_BOUNDS){ // criteria for entering Out of Boundary functionality
         boundCounter += 1; // increment out of boundary counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -247,10 +263,12 @@ void State(){
       if (currentState==OUT_OF_BOUNDS){ // operations while out of boundary
         cutResistorOnB(); // cut both balloons
       }
+      break;
 
     ////MASTER TIMER REACHED////
     case PAST_TIMER:
 
+      Serial.println("Suggested State: Past Timer");
       if (currentState!=PAST_TIMER){ // criteria for entering Master Timer Reached functionality
         timerCounter += 1; // increment ascent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -273,13 +291,13 @@ void State(){
 
     ////DEFAULT////
     default: 
-
+  
     // move outside of switch-case
     // has to get through initialization to trigger states
     // if initialization never triggers, moves to the next of the function where it cuts A then B
 
       if (currentState==INITIALIZATION){ // currentState is initialized as INITIALIZATION, no other states have been activated
-
+        Serial.println("Suggested State: Initialization");
         defaultStamp = millis();
         if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
 
@@ -291,6 +309,7 @@ void State(){
       }
 
         else {
+          Serial.println("Suggested State: Error");
           // if it's not in initialization, means it entered another state at some point, then everything stopped working and stateSuggest = ERROR_STATE now
           // should wait a while to see if it will enter a state again, then do the same cut strategy, hoping for some slow descent
           defaultStamp2 = millis();
@@ -301,6 +320,7 @@ void State(){
             }
             }
         }
+        break;
         
   }
 }
