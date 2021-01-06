@@ -51,11 +51,12 @@ void Determination(){
     detData.Usage = 0x05; // using linear progression
     
   }*/
+  
+  else Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
 
-  else{
-    Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground
+  if (detData.Usage!=0x05 && detData.Usage!=0x01){
+    // THIS WILL IDEALLY NEVER TRIGGER
     detData.Usage = 0x00; // indicates error
-    // have LED indication
   }
   
 }
@@ -78,7 +79,7 @@ void Control(){
   if (detData.AR<=-100 && detData.AR>-375){
     stateSuggest = SLOW_DESCENT;
   }
-  if (detData.AR<=375){
+  if (detData.AR<=-375){
     stateSuggest = DESCENT;
   }
 
@@ -94,10 +95,14 @@ void Control(){
     stateSuggest = OUT_OF_BOUNDS;  
   }
 
-  
+  if (detData.alt < ALTITUDE_FLOOR){
+    stateSuggest = INITIALIZATION;
+    Serial.println("Suggested State: Initialization (or error or past timer if that comes next)");
+  }
 
   if (detData.Usage == 0x00){ // error state
     stateSuggest = ERROR_STATE; // doesn't exist - State will go to default
+    Serial.println("Suggested State: Error (or past timer if that comes next)");
   }
 
   if (millis() > MASTER_TIMER){
@@ -112,7 +117,8 @@ void State(){
   switch (stateSuggest){
     ////ASCENT////
     case ASCENT:
-    
+
+      Serial.println("Suggested State: Ascent");
       if (currentState!=ASCENT){ // criteria for entering Ascent functionality
         ascentCounter += 1; // increment ascent counter
         SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -125,6 +131,7 @@ void State(){
       }
 
       if (currentState==ASCENT){ // operations while in ascent
+        Serial.println("Current State: Ascent");
         
         if (millis()-ascentStamp >= ASCENT_TIMER){ // if ascent timer is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
@@ -132,6 +139,7 @@ void State(){
           cdu1Packet_tx[5] = checksum;
           sendMeshData(cdu1Packet_tx,false);
           cutReasonA = 0x00;
+          
         }
 
         if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
@@ -148,7 +156,8 @@ void State(){
 
     ////SLOW ASCENT////
     case SLOW_ASCENT:
-    
+
+      Serial.println("Suggested State: Slow Ascent");
       if (currentState!=SLOW_ASCENT){ // criteria for entering Slow Ascent functionality
           SAcounter += 1; // increment slow ascent counter
           ascentCounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -161,7 +170,7 @@ void State(){
         }
   
         if (currentState==SLOW_ASCENT){ // operations while in slow ascent
-          
+          Serial.println("Current State: Slow Ascent");
           if (detData.alt > ALTITUDE_CEILING){ // if ceiling reached
             checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
             cdu1Packet_tx[4] = checksum >> 8;
@@ -191,19 +200,25 @@ void State(){
     ////FLOAT////
     case FLOAT:
 
+      Serial.println("Suggested State: Float");
+      
+     
       if (currentState!=FLOAT){ // criteria for entering Float functionality
         floatCounter += 1; // increment float counter
         ascentCounter =0, SAcounter = 0, SDcounter = 0, descentCounter = 0; 
         tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0; // reset all other state counters
+
+        FARcounter = 0;
         
-        if (ascentCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
+        if (floatCounter >= 180 && detData.alt > ALTITUDE_FLOOR){ // doesn't activate below floor or before 180 consecutive state suggestions
           currentState = FLOAT;
           floatStamp = millis();
         }
       }
 
       if (currentState==FLOAT){ // operations while in float
-        
+      
+        Serial.println("Current State: Float");
         if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
@@ -232,6 +247,7 @@ void State(){
     ////SLOW DESCENT////
     case SLOW_DESCENT:
 
+      Serial.println("Suggested State: Slow Descent");
       if (currentState!=SLOW_DESCENT){ // criteria for entering Slow Descent functionality
         SDcounter += 1; // increment slow descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0; 
@@ -244,7 +260,7 @@ void State(){
       }
 
       if (currentState==SLOW_DESCENT){ // operations while in slow descent
-        
+        Serial.println("Current State: Slow Descent");
         if (detData.alt < SLOW_DESCENT_FLOOR){ // if floor is reached
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
@@ -279,7 +295,8 @@ void State(){
 
     ////DESCENT////
     case DESCENT:
-    
+
+      Serial.println("Suggested State: Descent");
       if (currentState!=DESCENT){ // criteria for entering Descent functionality
         descentCounter += 1; // increment descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0;
@@ -292,8 +309,8 @@ void State(){
       }
 
       if (currentState==DESCENT){ // operations while in descent
-        
-        if (millis()-ascentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
+        Serial.println("Current State: Descent");
+        if (millis()-descentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
           checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
@@ -339,7 +356,8 @@ void State(){
         
     ////OUT OF BOUNDARY////
     case OUT_OF_BOUNDS:
-    
+
+      Serial.println("Suggested State: Out of Bounds");
       if (currentState!=OUT_OF_BOUNDS){ // criteria for entering Out of Boundary functionality
         boundCounter += 1; // increment out of boundary counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -351,6 +369,7 @@ void State(){
       }
 
       if (currentState==OUT_OF_BOUNDS){ // operations while out of boundary
+        Serial.println("Current State: Out of Bounds");
         checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
           cdu1Packet_tx[4] = checksum >> 8;
           cdu1Packet_tx[5] = checksum;
@@ -369,6 +388,7 @@ void State(){
     ////MASTER TIMER REACHED////
     case PAST_TIMER:
 
+      Serial.println("Suggested State: Past Timer");
       if (currentState!=PAST_TIMER){ // criteria for entering Master Timer Reached functionality
         timerCounter += 1; // increment ascent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -380,13 +400,16 @@ void State(){
       }
 
       if (currentState==PAST_TIMER){ // operations after Master Timer reached
-        
+        Serial.println("Current State: Past Timer");
         checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
         cdu1Packet_tx[4] = checksum >> 8;
         cdu1Packet_tx[5] = checksum;
         sendMeshData(cdu1Packet_tx,false);
         cutReasonA = 0x08;
-        timerStampCutA = millis();
+        if (timeCounter==1) {
+          timerStampCutA = millis();
+          timeCounter++;
+        }
         if (millis() - timerStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
@@ -404,8 +427,11 @@ void State(){
     // if initialization never triggers, moves to the next of the function where it cuts A then B
 
       if (currentState==INITIALIZATION){ // currentState is initialized as INITIALIZATION, no other states have been activated
-
-        defaultStamp = millis();
+        Serial.println("Current State: Initialization");
+        if (initCounter==1) {
+          defaultStamp = millis();
+          initCounter++;
+        }
         if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
 
          checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
@@ -413,7 +439,10 @@ void State(){
          cdu1Packet_tx[5] = checksum;
          sendMeshData(cdu1Packet_tx,false);
          cutReasonA = 0x09;
-         defaultStampCutA = millis();
+         if (initCounter2==1) {
+          defaultStampCutA = millis();
+          initCounter2++;
+        }
          if (millis() - defaultStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
@@ -426,6 +455,7 @@ void State(){
         }
 
         else {
+          Serial.println("Current State: Error");
           // if it's not in initialization, means it entered another state at some point, then everything stopped working and stateSuggest = ERROR_STATE now
           // should wait a while to see if it will enter a state again, then do the same cut strategy, hoping for some slow descent
           defaultStamp2 = millis();
@@ -450,4 +480,14 @@ void State(){
         break;
         
   }
+  Serial.println();
+  if (cutReasonA != 0x20 || cutReasonB != 0x20){
+    Serial.print("CUT REASON A: ");
+    Serial.print(cutReasonA,HEX);
+    Serial.print(", CUT REASON B: ");
+    Serial.println(cutReasonB,HEX);
+    Serial.println();
+  }
+  Serial.println(detData.alt);
+  Serial.println(detData.AR);
 }

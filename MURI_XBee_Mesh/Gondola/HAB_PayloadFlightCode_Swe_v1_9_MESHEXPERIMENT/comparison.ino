@@ -38,6 +38,18 @@
   heading = getHeading(latitude[1],latitude[9],longitude[1],longitude[9]);
   groundSpeed = getGroundSpeed(latitude[1],latitude[9],longitude[1],longitude[9],timeStamp[1],timeStamp[9]);
   ascentRate = getAscentRate(Altitude[1],Altitude[9],timeStamp[1],timeStamp[9]);
+  
+//  Serial.print("OG AR: ");
+//  Serial.println(ascentRate);
+  if (abs(ascentRate-ascentRatePrev)>100){ // throws out bad AR, which happens occasionally
+    FARcounter++;
+    if (FARcounter == 1) ascentRate = ascentRatePrev;
+  }
+  else FARcounter = 0;
+  ascentRatePrev = ascentRate;
+//  Serial.print("prev AR: ");
+//  Serial.println(ascentRatePrev);
+  
   dt = (timeStamp[1] - timeStamp[9])/1000;
   checkFix();
     

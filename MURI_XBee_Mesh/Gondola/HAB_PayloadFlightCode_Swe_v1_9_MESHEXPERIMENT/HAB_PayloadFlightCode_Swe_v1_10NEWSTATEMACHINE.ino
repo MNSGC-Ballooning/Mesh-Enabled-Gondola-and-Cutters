@@ -118,7 +118,7 @@ UbloxGPS gps(&Serial3);
 bool set_airborne = false;
 
 void initGPS() {
-  set_airborne = gps.setAirborne();
+  set_airborne = true;
 
   delay(50);
   if (set_airborne) {
@@ -134,7 +134,7 @@ void initGPS() {
 /////////////////////////////////////////////////////
 
 void setup() {
-  while(!Serial) Serial.begin(115200); //Serial Monitor
+  Serial.begin(115200); //Serial Monitor
   Serial.println("Check zero");
   Serial1.begin(115200);
   Serial2.begin(115200);
@@ -652,7 +652,14 @@ void write_turbulence_data() {
 
 void loop()
 {
+
+  if(millis()-xbeeStamp >=100) {
+    xbeeStamp = millis();
+    updateXbee();
+  }
+  
   if(millis()-updateStamp >= 1000) {
+    updateStamp = millis();
     updateXbee();
     write_cdu1_data();
     write_cdu2_data();
@@ -660,20 +667,20 @@ void loop()
     if (which == 1) {
       MTcdu1Packet_tx[2] = fixStatus[0];
       MTcdu2Packet_tx[2] = fixStatus[0];
-      sendMeshData(MTcdu1Packet_tx, false);
       sendMeshData(MTcdu2Packet_tx, true);
+      delay(15);
+      sendMeshData(MTcdu1Packet_tx, false);
       which = 2;
     }
     else if (which == 2) {
       AlternateMTcdu1Packet_tx[2] = fixStatus[0];
       AlternateMTcdu2Packet_tx[2] = fixStatus[0];
-      sendMeshData(AlternateMTcdu1Packet_tx, false);
       sendMeshData(AlternateMTcdu2Packet_tx, true);
+      delay(15);
+      sendMeshData(AlternateMTcdu1Packet_tx, false);
       which = 1;
     }
- 
-    updateStamp = millis();
-    
+
     if (millis()>MASTER_TIMER){ // operations after Master Timer reached
         
         checksum = cdu1Packet_tx[0] + cdu1Packet_tx[1] + cdu1Packet_tx[2] + cdu1Packet_tx[3];
@@ -682,13 +689,13 @@ void loop()
         sendMeshData(cdu1Packet_tx,false);
         cutReasonA = 0x08;
         timerStampCutA = millis();
-        if (millis() - timerStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
+        //if (millis() - timerStampCutA >= SLOW_DESCENT_TIMER){ // wait to cut B (hopefully to get slow descent data)
           checksum = cdu2Packet_tx[0] + cdu2Packet_tx[1] + cdu2Packet_tx[2] + cdu2Packet_tx[3];
           cdu2Packet_tx[4] = checksum >> 8;
           cdu2Packet_tx[5] = checksum;
           sendMeshData(cdu2Packet_tx,true);   
           cutReasonB = 0x08;
-        }
+        //}
     }
   }
     

@@ -25,7 +25,7 @@ void sendMeshData(byte *meshdata) {                 //Sends data to both A and B
   sendMeshData(meshdata, true);
 }
 bool sendMeshData(byte *meshdata, bool aorb) {      //Sends data to A (aorb=0) or B (aorb=1) cutters. meshadata should be a pointer to an array of size CDU_TX_SIZE that holds data to be sent
-                                                    //Returns true if data is sent, false if cutter connection not yet established.
+  bool goodcheck = true;                                   //Returns true if data is sent, false if cutter connection not yet established.
   if(!aorb) {
     if(connectedA != 0x00)  {
       xbee.write(0x02);
@@ -34,7 +34,7 @@ bool sendMeshData(byte *meshdata, bool aorb) {      //Sends data to A (aorb=0) o
         xbee.write(*(meshdata+i));
       }
     }
-    else return false;
+    else goodcheck = false;
   }
   else {
     if(connectedB != 0x00)  {
@@ -44,14 +44,15 @@ bool sendMeshData(byte *meshdata, bool aorb) {      //Sends data to A (aorb=0) o
         xbee.write(*(meshdata+i));
       }
     }
-    else return false;
+    else goodcheck = false;
   }
-  for(int i=0; i<CDU_TX_SIZE; i++) {
-    Serial.println(" ");
-    Serial.println(meshdata[i]);
-    Serial.print(" ");
-  }
-  return true;
+  //for(int i=0; i<CDU_TX_SIZE; i++) {
+//    Serial.println(" ");
+//    Serial.println(meshdata[i]);
+//    Serial.print(" ");
+  //}
+//  delay(1);
+  return goodcheck;
 }
 
 void updateXbee() {                                 //The main function to call during loop() after code integration. This manages incoming radio traffic and contacts
@@ -76,8 +77,15 @@ void updateXbee() {                                 //The main function to call 
         if(xbee.read() == connectedA) {
           for(int i=0;i<CDU_RX_SIZE;i++)  {
             recoveredDataA[i]=xbee.read();
+            delay(1);
           }
           downtimeA = millis()/1000.0;
+        }
+        else {
+          for(int i=0;i<CDU_RX_SIZE;i++)  {
+            xbee.read();
+            delay(1);
+          }
         }
         break;
       }
@@ -85,8 +93,15 @@ void updateXbee() {                                 //The main function to call 
         if(xbee.read() == connectedB) {
           for(int i=0;i<CDU_RX_SIZE;i++)  {
             recoveredDataB[i]=xbee.read();
+            delay(1);
           }
           downtimeB = millis()/1000.0;
+        }
+        else {
+          for(int i=0;i<CDU_RX_SIZE;i++)  {
+            xbee.read();
+            delay(1);
+          }
         }
         break;
       }
@@ -99,7 +114,8 @@ void updateXbee() {                                 //The main function to call 
     }
   }
   
-  if(connectedA == 0x00 || connectedB == 0x00)  {
+  if((connectedA == 0x00 || connectedB == 0x00) && millis()-pingcool>500)  {
+    pingcool = millis();
     searching = true;
     xbee.write(0x00); //sends out ping looking for unassigned XBees
   }
