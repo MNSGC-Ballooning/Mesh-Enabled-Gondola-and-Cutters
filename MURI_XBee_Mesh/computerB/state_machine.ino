@@ -59,7 +59,7 @@ void Control(){
   if (detData.AR<=-100 && detData.AR>-375){
     stateSuggest = SLOW_DESCENT;
   }
-  if (detData.AR<=375){
+  if (detData.AR<=-375){
     stateSuggest = DESCENT;
   }
 

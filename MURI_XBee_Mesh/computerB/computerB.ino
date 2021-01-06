@@ -90,10 +90,10 @@
 #define SA_FLOOR 50000 // standard 50000
 #define SLOW_DESCENT_FLOOR 80000 // standard 80000
 ////change lat and long boundaries before every flight!!!////
-#define EASTERN_BOUNDARY 900
-#define WESTERN_BOUNDARY -900
-#define SOUTHERN_BOUNDARY -900
-#define NORTHERN_BOUNDARY 900
+#define EASTERN_BOUNDARY -92.49
+#define WESTERN_BOUNDARY -94.47
+#define SOUTHERN_BOUNDARY 43.74
+#define NORTHERN_BOUNDARY 50.45//44.55
 /////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature
@@ -295,8 +295,8 @@ void loop() {
     //readInstruction();  // read commands from main, cuts if instructed
 
     updateXbee();
-    timeOut = millis()-(downtimeG*1000);
-     if( timeOut > 1*M2MS){ // change to desired max disconnect time
+    //timeOut = millis()-(downtimeG*1000);
+     if( cutterBIdentifier == 0x02){ //timeOut > 1*M2MS){ // change to desired max disconnect time
       autonomousNow = true;
       Serial.println(F("Autonomous Mode ON"));
     }
