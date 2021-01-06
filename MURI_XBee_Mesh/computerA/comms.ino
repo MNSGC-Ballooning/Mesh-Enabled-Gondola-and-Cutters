@@ -24,6 +24,12 @@ void updateXbee() {                                 //The main function to call 
           recieveTransmission();
           downtimeG = millis()/1000.0;
         }
+        else {
+          for(int i=0; i<7; i++) {
+            xbee.read();
+            delay(1);
+          }
+        }
         break;
       }
       case(0x03): break; //packet from a cutter A, ignored since this is a cutter
@@ -151,6 +157,7 @@ void recieveTransmission() {
              inputHolder[i] = xbee.read(); // saves each byte into byte array input
              Serial.print(inputHolder[i],HEX);
              Serial.print(F(" "));
+             delay(1);
              // if (i<4) checksumCheck += inputHolder[i];
              }
           }

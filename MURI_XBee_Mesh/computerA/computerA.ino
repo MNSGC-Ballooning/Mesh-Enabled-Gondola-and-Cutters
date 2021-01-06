@@ -91,10 +91,10 @@
 #define SA_FLOOR 50000 // standard 50000
 #define SLOW_DESCENT_FLOOR 80000 // standard 80000
 ////change lat and long boundaries before every flight!!!////
-#define EASTERN_BOUNDARY 900
-#define WESTERN_BOUNDARY -900
-#define SOUTHERN_BOUNDARY -900
-#define NORTHERN_BOUNDARY 900
+#define EASTERN_BOUNDARY -92.49
+#define WESTERN_BOUNDARY -94.47
+#define SOUTHERN_BOUNDARY 43.74
+#define NORTHERN_BOUNDARY 50.45//44.55
 /////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature
@@ -157,7 +157,7 @@ uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0, in
 unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, SDstamp = 0, descentStamp = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0;
 
 uint8_t currentState = INITIALIZATION; // state we are in, starts as initialization
-uint8_t stateSuggest = ASCENT; // state recommended by control
+uint8_t stateSuggest; // state recommended by control
 uint8_t cutReasonA;
 uint8_t cutStatusA = 0x01; // 1 for false, 2 for true
 bool cutterOnA = false;
@@ -287,7 +287,7 @@ void loop() {
 //     if (millis() - testStamp > 5*M2MS && once == 1){
 //       testStamp = millis();
 //       once++;
-//       cutResistorOnA();
+//       requestCut();
 //     }
      
     sendData();         // send current data to main
@@ -295,8 +295,8 @@ void loop() {
     //readInstruction();  // read commands from main, cuts if instructed
 
     updateXbee();
-    timeOut = millis()-(downtimeG*1000);
-     if( timeOut > 1*M2MS){ // change to desired max disconnect time
+    //timeOut = millis()-(downtimeG*1000);
+     if( cutterAIdentifier == 0x01){ //timeOut > 1*M2MS){ // change to desired max disconnect time
       autonomousNow = true;
       Serial.println(F("Autonomous Mode ON"));
     }
@@ -304,8 +304,8 @@ void loop() {
 
   // cut balloon if the master timer expires
   if(millis() > MASTER_TIMER) {
-    cutResistorOnA();
-    cutReasonA = F("master timer expired");
+    requestCut();
+    cutReasonA = 0x70;
   }
 
   if(millis() - cutStampA > CUT_INTERVAL && cutterOnA) cutResistorOffA();

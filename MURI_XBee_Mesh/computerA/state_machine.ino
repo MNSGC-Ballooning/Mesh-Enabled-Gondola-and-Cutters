@@ -11,6 +11,7 @@
 // Reached southern boundary 0x40
 // Below min temp 0x50
 // Above max temp 0x60
+// Master timer reached 0x70
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////DETERMINATION///////////////////////////////////////////////////////////////
@@ -22,15 +23,13 @@ void Determination(){
   // if below floor with bad GPS, throws error
   // uses hex indication as to whether it is using GPS, pressure, or linear progression
 
-  if (fixStatus[0] == FIX && fixStatus[9] == FIX){ // have compareGPS return a bool - true if GPS data is good, false if not (all 3 GPS fail) SET DETDATA.USAGE TO 1, 2, or 3 in COMPAREGPS FUNCTION
-    
-    detData.alt = GPSdata.alt;
+
+      detData.alt = GPSdata.alt;
     detData.latitude = GPSdata.latitude;
     detData.longitude = GPSdata.longitude;
     detData.AR = GPSdata.AR;
-    
-  }
-  else Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
+  if (fixStatus[0] != FIX && fixStatus[9] != FIX){ // have compareGPS return a bool - true if GPS data is good, false if not (all 3 GPS fail) SET DETDATA.USAGE TO 1, 2, or 3 in COMPAREGPS FUNCTIO
+     Serial.println(F("GPS NOT WORKING"));} // outputs a warning if GPS not working while on the ground 
 
   if (detData.Usage!=0x05 && detData.Usage!=0x01){
     // THIS WILL IDEALLY NEVER TRIGGER
@@ -73,6 +72,10 @@ void Control(){
     stateSuggest = OUT_OF_BOUNDS;  
   }
 
+  if (detData.alt < ALTITUDE_FLOOR){
+    stateSuggest = INITIALIZATION;
+  }
+
   if (detData.Usage == 0x00){ // error state
     stateSuggest = ERROR_STATE; // doesn't exist - State will go to default
   }
@@ -80,11 +83,6 @@ void Control(){
   if (millis() > MASTER_TIMER){
     stateSuggest = PAST_TIMER;
   }
-
-  if (detData.alt < ALTITUDE_FLOOR){
-    stateSuggest = INITIALIZATION;
-  }
-
   
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -96,6 +94,8 @@ void State(){
   switch (stateSuggest){
     ////ASCENT////
     case ASCENT:
+
+      Serial.println("Suggested State: Ascent");
       if (currentState!=ASCENT){ // criteria for entering Ascent functionality
         ascentCounter += 1; // increment ascent counter
         SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -110,7 +110,7 @@ void State(){
       if (currentState==ASCENT){ // operations while in ascent
         
         if (detData.alt > ALTITUDE_CEILING || millis()-ascentStamp >= ASCENT_TIMER){ // if ceiling or timer is reached
-          cutResistorOnA(); // only cuts A (large balloon) so slow descent can still be acheived
+          requestCut(); // only cuts A (large balloon) so slow descent can still be acheived
         }
       }
       break;
@@ -132,18 +132,18 @@ void State(){
         if (currentState==SLOW_ASCENT){ // operations while in slow ascent
           
           if (detData.alt > ALTITUDE_CEILING || millis()-SAstamp >= SA_TIMER){ // if ceiling or timer is reached
-            cutResistorOnA(); // cut only A to enter slow descent
+            requestCut(); // cut only A to enter slow descent
           }
 
           if (detData.alt < SA_FLOOR){ // cuts immediately under threshold
-            cutResistorOnA(); // only cuts A (large balloon) so some slow descent can still be acheived
+            requestCut(); // only cuts A (large balloon) so some slow descent can still be acheived
           }
         }
         break;
 
     ////FLOAT////
     case FLOAT:
-      Serial.println("float");
+      Serial.println("Suggested State: Float");
       if (currentState!=FLOAT){ // criteria for entering Float functionality
         floatCounter += 1; // increment float counter
         ascentCounter =0, SAcounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -158,18 +158,18 @@ void State(){
       if (currentState==FLOAT){ // operations while in float
         
         if (detData.alt > ALTITUDE_CEILING){ // if ceiling is reached
-          cutResistorOnA(); // cut only A to attempt to enter slow descent
+          requestCut(); // cut only A to attempt to enter slow descent
         }
 
         if (millis()-floatStamp >= FLOAT_TIMER){ // if timer reached
-          cutResistorOnA(); // cut both balloons
+          requestCut(); // cut both balloons
         }
       }
       break;
 
     ////SLOW DESCENT////
     case SLOW_DESCENT:
-      Serial.println("SD");
+      Serial.println("Suggested State: Slow Descent");
       if (currentState!=SLOW_DESCENT){ // criteria for entering Slow Descent functionality
         SDcounter += 1; // increment slow descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0; 
@@ -184,7 +184,7 @@ void State(){
       if (currentState==SLOW_DESCENT){ // operations while in slow descent
         
         if (detData.alt < SLOW_DESCENT_FLOOR || millis()-SDstamp >= SLOW_DESCENT_TIMER){ // if floor or timer is reached
-          cutResistorOnA(); // cut both balloons (A is likely cut already, but just in case)
+          requestCut(); // cut both balloons (A is likely cut already, but just in case)
         }
       }
       break;
@@ -192,7 +192,8 @@ void State(){
 
     ////DESCENT////
     case DESCENT:
-      Serial.println("descent");
+
+      Serial.println("Suggested State: Descent");
       if (currentState!=DESCENT){ // criteria for entering Descent functionality
         descentCounter += 1; // increment descent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0;
@@ -207,7 +208,7 @@ void State(){
       if (currentState==DESCENT){ // operations while in ascent
         
         if (millis()-ascentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
-          cutResistorOnA(); // cut both balloons
+          requestCut(); // cut both balloons
         }
       }
       break;
@@ -222,7 +223,7 @@ void State(){
       }
 
       if (currentState==TEMP_FAILURE){ // operations while in temperature failure
-        cutResistorOnA();
+        requestCut();
         cutResistorOnB();
       }*/
 
@@ -235,13 +236,13 @@ void State(){
       }
 
       if (currentState==BATTERY_FAILURE){ // operations while in battery failure
-        cutResistorOnA();
+        requestCut();
         cutResistorOnB();
       }*/
         
     ////OUT OF BOUNDARY////
     case OUT_OF_BOUNDS:
-      Serial.println("out of bound");
+      Serial.println("Suggested State: Out of Bounds");
       if (currentState!=OUT_OF_BOUNDS){ // criteria for entering Out of Boundary functionality
         boundCounter += 1; // increment out of boundary counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -253,13 +254,13 @@ void State(){
       }
 
       if (currentState==OUT_OF_BOUNDS){ // operations while out of boundary
-        cutResistorOnA(); // cut both balloons
+        requestCut(); // cut both balloons
       }
       break;
 
     ////MASTER TIMER REACHED////
     case PAST_TIMER:
-      Serial.println("past timer");
+      Serial.println("Suggested State: Past Timer");
       if (currentState!=PAST_TIMER){ // criteria for entering Master Timer Reached functionality
         timerCounter += 1; // increment ascent counter
         ascentCounter = 0, SAcounter = 0, floatCounter = 0, SDcounter = 0, descentCounter = 0; 
@@ -272,7 +273,7 @@ void State(){
 
       if (currentState==PAST_TIMER){ // operations after Master Timer reached
         
-        cutResistorOnA();
+        requestCut();
         // wait to cut B (hopefully to get slow descent data)
       }
 
@@ -287,7 +288,7 @@ void State(){
     // if initialization never triggers, moves to the next of the function where it cuts A then B
 
       if (currentState==INITIALIZATION){ // currentState is initialized as INITIALIZATION, no other states have been activated
-        Serial.println("HERE 1");
+        Serial.println("Suggested State: Initialization");
         if (initCounter==1) {
           defaultStamp = millis();
           initCounter++;
@@ -295,23 +296,22 @@ void State(){
         
         Serial.println(defaultStamp);
         if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
-        Serial.println("HERE 2");
-         cutResistorOnA();
+         requestCut();
          // wait to cut B (hopefully to get slow descent data)
         }
-
+      }
         else {
+          Serial.println("Suggested State: Error");
           // if it's not in initialization, means it entered another state at some point, then everything stopped working and stateSuggest = ERROR_STATE now
           // should wait a while to see if it will enter a state again, then do the same cut strategy, hoping for some slow descent
           defaultStamp2 = millis();
           if ( (millis()-defaultStamp2) >= (DEFAULT_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave default
 
-            cutResistorOnA();
+            requestCut();
             // wait to cut B (hopefully to get slow descent data)
             }
         }
         
-  }
   break;
 }
 }
