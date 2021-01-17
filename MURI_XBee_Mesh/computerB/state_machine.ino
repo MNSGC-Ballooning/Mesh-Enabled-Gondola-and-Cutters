@@ -1,4 +1,5 @@
 // CUT REASON KEY
+// Initialized to 0x22
 // Ascent Timer ran out 0x00
 // Termination altitude reached 0x01
 // Slow ascent state 0x02

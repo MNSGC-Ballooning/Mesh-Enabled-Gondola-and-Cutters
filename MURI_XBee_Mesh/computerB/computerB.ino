@@ -91,9 +91,9 @@
 #define SLOW_DESCENT_FLOOR 80000 // standard 80000
 ////change lat and long boundaries before every flight!!!////
 #define EASTERN_BOUNDARY -92.49
-#define WESTERN_BOUNDARY -94.47
+#define WESTERN_BOUNDARY -95.07
 #define SOUTHERN_BOUNDARY 43.74
-#define NORTHERN_BOUNDARY 50.45//44.55
+#define NORTHERN_BOUNDARY 45.57
 /////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature
@@ -158,7 +158,7 @@ unsigned long timerStampCutA = 0, defaultStamp = 0, defaultStamp2, defaultStampC
 
 uint8_t currentState = INITIALIZATION; // state we are in, starts as initialization
 uint8_t stateSuggest; // state recommended by control
-uint8_t cutReasonB;
+uint8_t cutReasonB = 0x22;
 uint8_t cutStatusB = 0x01; // 1 for false, 2 for true
 bool cutterOnB = false;
 

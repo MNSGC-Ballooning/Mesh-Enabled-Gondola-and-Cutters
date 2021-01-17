@@ -118,7 +118,7 @@ UbloxGPS gps(&Serial3);
 bool set_airborne = false;
 
 void initGPS() {
-  set_airborne = true;
+  set_airborne = gps.setAirborne();
 
   delay(50);
   if (set_airborne) {
@@ -462,7 +462,9 @@ void write_sps_data() {
   umnPacket[write_counter++] = umn_time_packet;
   umnPacket[write_counter++] = umn_time_packet >> 8;
   umnPacket[write_counter++] = umn_time_packet >> 16;
-  umnPacket[write_counter] = umn_time_packet >> 24;
+  umnPacket[write_counter++] = umn_time_packet >> 24;
+  umnPacket[write_counter++] = cutReasonA;
+  umnPacket[write_counter++] = cutReasonB;
 
   //umnPacket[2] = sps_packet_number >> 8;              // For testing purposes, may be removed later
   //umnPacket[3] = sps_packet_number;

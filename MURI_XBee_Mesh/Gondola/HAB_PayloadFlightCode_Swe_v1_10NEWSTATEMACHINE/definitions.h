@@ -64,15 +64,14 @@ uint16_t type = 0;             //Identifier for type of turbulence packet.
 uint16_t sps_start = 0;        //Identifier for SPS30 data packet.
 uint16_t erau_checksum = 0;
 uint16_t checksum;  
-uint8_t cutReasonA = 0x20;
-uint8_t cutReasonB = 0x20;
+uint8_t cutReasonA = 0x22, cutReasonB = 0x22;
 
 uint16_t sps_packet_number = 0;// Used to test whether packets are being skipped - may be removed later
 uint16_t cu_packet_number = 0; // Used to test whether packets are being skipped - may be removed later
 
 //ARRAY SIZE CONSTANTS
 #define GPS_SIZE 48             // Number of bytes in GPS + ERAU packet
-#define SPS_SIZE 77             // Number of bytes in SPS30 packet
+#define SPS_SIZE 81             // Number of bytes in SPS30 packet
 #define INSTRUMENT_SIZE 67      // Number of bytes in instrument packet
 #define GONDOLA_SIZE 50         // Number of bytes in gondola packet
 #define RAW_SIZE 73             // Number of bytes in raw packet
@@ -187,24 +186,24 @@ float altA, altB, altC, altAPrev, altBPrev, altCPrev;
 ///////////********************** STATE MACHINE DEFINITIONS ***********************//////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define M2MS 60000
+  #define M2MS 2*60000
 #define ALTITUDE_FLOOR 5000
-#define ALTITUDE_CEILING 100000 // 100000 standard
-#define SA_FLOOR 50000 // 50000 standard
+#define ALTITUDE_CEILING 100000
+#define SA_FLOOR 50000
 #define SLOW_DESCENT_FLOOR 80000
 ////change boundaries before every flight!!!////
-#define EASTERN_BOUNDARY -92.55
-#define WESTERN_BOUNDARY -96.45
-#define SOUTHERN_BOUNDARY 43.68
-#define NORTHERN_BOUNDARY 50.45//44.62
+#define EASTERN_BOUNDARY -92.49
+#define WESTERN_BOUNDARY -95.07
+#define SOUTHERN_BOUNDARY 43.74
+#define NORTHERN_BOUNDARY 45.57
 ///////////////////////////////////////////////
-#define MASTER_TIMER 180*M2MS       // 180 standard
-#define ASCENT_TIMER 150*M2MS       // 150 standard
-#define SA_TIMER 20*M2MS            // 20 standard
-#define FLOAT_TIMER 30*M2MS         // 30 standard
-#define SLOW_DESCENT_TIMER 40*M2MS  // 40 standard
-#define INITIALIZATION_TIME 25*M2MS // 25 standard 
-#define DEFAULT_TIME 30*M2MS        // 30 standard
+#define MASTER_TIMER 180*M2MS
+#define ASCENT_TIMER 150*M2MS
+#define SA_TIMER 30*M2MS
+#define FLOAT_TIMER 30*M2MS
+#define SLOW_DESCENT_TIMER 40*M2MS
+#define INITIALIZATION_TIME 25*M2MS
+#define DEFAULT_TIME 30*M2MS
 
 #define INITIALIZATION 0x00
 #define ASCENT 0x01
@@ -241,7 +240,7 @@ struct DetData{ // proposed struct filled out by Determination
 uint8_t SDcounter = 0;
 uint8_t ascentCounter = 0, SAcounter = 0, floatCounter = 0, descentCounter = 0;
 uint8_t tempCounter = 0, battCounter = 0, boundCounter = 0, timerCounter = 0;
-unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0, xbeeStamp=0;
+unsigned long ascentStamp = 0, SAstamp = 0, floatStamp = 0, defaultStamp = 0, defaultStamp2, defaultStampCutA = 0, xbeeStamp = 0;
 
 bool tenGoodHits = false;
 uint8_t tenGoodHitsCounter = 0;
