@@ -6,7 +6,7 @@ void initGPS() {
 
   Serial.println(F("GPS initialized..."));
   delay(50);
-  if(gps.setAirborne()){
+  while(gps.setAirborne()){
     Serial.println(F("Airborne mode set..."));
   }
   Serial.println(F("GPS configured"));
