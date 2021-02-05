@@ -92,9 +92,9 @@
 #define SLOW_DESCENT_FLOOR 80000 // standard 80000
 ////change lat and long boundaries before every flight!!!////
 #define EASTERN_BOUNDARY -92.49
-#define WESTERN_BOUNDARY -95.07
-#define SOUTHERN_BOUNDARY 43.74
-#define NORTHERN_BOUNDARY 45.57
+#define WESTERN_BOUNDARY -95.11
+#define SOUTHERN_BOUNDARY 43.79
+#define NORTHERN_BOUNDARY 44.62
 /////////////////////////////////////////////////////////////
 #define MIN_TEMP -60                    // minimum acceptable internal temperature
 #define MAX_TEMP 90                     // maximum acceptable interal temperature

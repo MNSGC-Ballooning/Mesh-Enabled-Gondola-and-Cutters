@@ -69,9 +69,9 @@ void sendData(){
   dataPacket.hrs = gps.getHour();
   dataPacket.mins = gps.getMinute();
   dataPacket.secs = gps.getSecond();
-  dataPacket.latitude = gps.getLat();
-  dataPacket.longitude = gps.getLon();
-  dataPacket.Altitude = gps.getAlt_feet();
+  dataPacket.latitude = latitude[0];
+  dataPacket.longitude = longitude[0];
+  dataPacket.Altitude = alt[0];
   dataPacket.volts = 2*analogRead(AKSHAY_PIN);
   dataPacket.t1 = t1;
   dataPacket.t2 = t2;
