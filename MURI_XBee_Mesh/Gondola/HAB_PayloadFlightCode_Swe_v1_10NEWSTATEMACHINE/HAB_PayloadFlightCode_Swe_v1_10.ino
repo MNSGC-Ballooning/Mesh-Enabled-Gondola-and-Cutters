@@ -121,7 +121,7 @@ void initGPS() {
   set_airborne = gps.setAirborne();
 
   delay(50);
-  while (set_airborne) {
+  if (set_airborne) {
     Serial.println("Airborne mode set...");
     Serial.println("GPS configured");
   }

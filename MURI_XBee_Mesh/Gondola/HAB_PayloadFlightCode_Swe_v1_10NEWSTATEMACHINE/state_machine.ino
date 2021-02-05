@@ -54,7 +54,7 @@ void Determination(){
   
   else Serial.println(F("GPS NOT WORKING")); // outputs a warning if GPS not working while on the ground 
 
-  if (detData.Usage!=0x05 && detData.Usage!=0x01){
+  if (detData.Usage!=0x05 && detData.Usage!=0x01 && detData.Usage!=0x02 && detData.Usage!=0x03){
     // THIS WILL IDEALLY NEVER TRIGGER
     detData.Usage = 0x00; // indicates error
   }

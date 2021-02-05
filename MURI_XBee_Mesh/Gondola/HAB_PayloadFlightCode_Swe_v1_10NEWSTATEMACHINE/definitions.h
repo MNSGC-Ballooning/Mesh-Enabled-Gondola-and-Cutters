@@ -193,9 +193,9 @@ float altA, altB, altC, altAPrev, altBPrev, altCPrev;
 #define SLOW_DESCENT_FLOOR 80000
 ////change boundaries before every flight!!!////
 #define EASTERN_BOUNDARY -92.49
-#define WESTERN_BOUNDARY -95.07
-#define SOUTHERN_BOUNDARY 43.74
-#define NORTHERN_BOUNDARY 45.57
+#define WESTERN_BOUNDARY -95.11
+#define SOUTHERN_BOUNDARY 43.79
+#define NORTHERN_BOUNDARY 44.62
 ///////////////////////////////////////////////
 #define MASTER_TIMER 180*M2MS
 #define ASCENT_TIMER 150*M2MS
