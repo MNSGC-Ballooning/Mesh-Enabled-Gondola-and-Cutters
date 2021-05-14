@@ -5,9 +5,8 @@ void initRelays(){
 }
 
 void actHeat(){  
-  
-  if (t1 < t2 && t1 > -100) sensTemp = t1;
-  else sensTemp = t2;
+
+  sensTemp = t1;
   
   if(sensTemp < LOW_TEMP){
     coldSensor = true;                                              // Setting the coldsensor variable to true or false based on the temperature readings
@@ -17,10 +16,6 @@ void actHeat(){
   }
 
   if(coldSensor && sensorHeatRelay.getState()==false){
-    /*if (m==1){
-      heatStamp = millis();  
-      m++;
-    } */
     sensorHeatRelay.setState(true);                                 // Some logic values that set the state of the sensor heat relay to that of the sensed temperature
     heatStatus = true;
   }
@@ -28,10 +23,5 @@ void actHeat(){
     sensorHeatRelay.setState(false); // Some logic values that set the state of the sensor heat relay to that of the sensed temperature
     heatStatus = false;
   }
-  /*if(millis() - heatStamp > HEAT_INTERVAL*M2MS){
-    heatStamp = 0;
-    m = 1;
-    sensorHeatRelay.setState(false); 
-    heatStatus = 0x00;
-  }*/
+
 }

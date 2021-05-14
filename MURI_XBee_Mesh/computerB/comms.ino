@@ -3,8 +3,8 @@ void xbeeStartup()  {                               //Sets up the cutter to mesh
   xbee.init(xbeeChannel);
   xbee.enterATmode();
   xbee.atCommand("ATDL0");
-  xbee.atCommand("ATMY1");
-  xbee.exitATmode();
+ xbee.atCommand("ATMY1");;
+ xbee.exitATmode();
 
   updateXbee();     //takes a first look for a nearby gondola
 }
@@ -34,13 +34,15 @@ void updateXbee() {                                 //The main function to call 
       }
       case(0x03): break; //packet from a cutter A, ignored since this is a cutter
       case(0x04): break; //packet from a cutter B, ignored since this is a cutter
-      case(0x05): break; //request to assign a cutter A to a gondola
+      case(0x05): { //request to assign a cutter A to a gondola
+        break;
+      }
       case(0x06): {
-      if(cutterBIdentifier == 0x02) {
+        if(cutterBIdentifier == 0x02) {
           cutterBIdentifier = xbee.read();
           downtimeG = millis()/1000.0;
-        }
-      break; }//request to assign a cutter B to a gondola
+        }break; //request to assign a cutter B to a gondola
+      }
       default: while(xbee.available()>0) xbee.read();
     }
   }
@@ -68,37 +70,34 @@ void sendData(){
   dataPacket.hrs = gps.getHour();
   dataPacket.mins = gps.getMinute();
   dataPacket.secs = gps.getSecond();
-  dataPacket.latitude = gps.getLat();
-  dataPacket.longitude = gps.getLon();
-  dataPacket.Altitude = gps.getAlt_feet();
-  dataPacket.volts = 2*analogRead(AKSHAY_PIN);
+  dataPacket.latitude = latitude[0];
+  dataPacket.longitude = longitude[0];
+  dataPacket.Altitude = alt[0];
   dataPacket.t1 = t1;
-  dataPacket.t2 = t2;
-  dataPacket.cutStatus = cutStatusB;
   dataPacket.heatStatus = heatStatus;
   dataPacket.currentState = currentState;
+  dataPacket.suggestedState = stateSuggest;
+  dataPacket.autonomous = autonomousNow;
+  dataPacket.cutStatus = cutStatusB;
   dataPacket.cutReason = cutReasonB;
   dataPacket.checksum = 0;
   dataPacket.stopByte = 0x53;
 
-  if (autonomousNow && cutStatusB == 0x01) dataPacket.cutStatus = 0x03; // cut status 3 for false and autonomous
-  if (autonomousNow && cutStatusB == 0x02) dataPacket.cutStatus = 0x04; // cut status 4 for true and autonomous
+  byte dataHolder[30] = {0};              // define output array
+  memcpy(&dataHolder, &dataPacket, 27);   // pass data packet to output array as bytes 
 
-  byte dataHolder[35] = {0};              // define output array
-  memcpy(&dataHolder, &dataPacket, 32);   // pass data packet to output array as bytes 
-
-  for( uint8_t i=0; i<33; i++) dataPacket.checksum+=dataHolder[i];
+  for( uint8_t i=0; i<28; i++) dataPacket.checksum+=dataHolder[i];
 
   byte extraStuff[2] = {0};
   memcpy(&extraStuff, &dataPacket.checksum, 2);
-  dataHolder[32] = extraStuff[0];
-  dataHolder[33] = extraStuff[1];
-  dataHolder[34] = 0x53;
+  dataHolder[27] = extraStuff[0];
+  dataHolder[28] = extraStuff[1];
+  dataHolder[29] = 0x53;
 
   sendMeshData(dataHolder);        // write output array to main computer
   Serial.println();
-  for(int i=0; i<34; i++){
-    //XbeeSerial.print(dataHolder[i],HEX);
+  for(int i=0; i<29; i++){
+    //XbeeSerial.print(dataHolder[i],HEX); // prints out sent data to serial
     Serial.print(dataHolder[i],HEX);
     Serial.print(F(" "));
   }
@@ -106,7 +105,7 @@ void sendData(){
 }
 
 void requestCut(){
-    if(autonomousNow && !cutterOnB) cutResistorOnB();
+    if(autonomousNow && !cutterOnB) cutResistorOnB(); // cuts if in autonomous mode
  }
 
 void fixXbeeLEDSchema() {
@@ -132,21 +131,17 @@ void fixXbeeLEDSchema() {
 }
 
 void recieveTransmission() {
-  //for(int i=0;i<CDU_TX_SIZE;i++)  {
-          //  recoveredDataG[i]=xbee.read();
-          //}
+
           byte inputHolder[7] = {0};
           uint16_t checksumCheck = 0;
           Serial.print(F("DATA AVAILABLE!!!"));
           inputHolder[0] = xbee.read();
           inputHolder[1] = xbee.read();
-          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x42){
-            //Serial.println("loop");
-            //Serial.println(inputHolder[0],HEX);
+          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x42){ // reads data until it gets the correct start order
             inputHolder[0] = xbee.read();
             inputHolder[1] = xbee.read();
           }
-          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x42){
+          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x42){ // if correct startByte and cutterTag, moves on
             Serial.print(inputHolder[0],HEX);
             Serial.print(F(" "));
             Serial.print(inputHolder[1],HEX);
@@ -157,7 +152,6 @@ void recieveTransmission() {
              Serial.print(inputHolder[i],HEX);
              Serial.print(F(" "));
              delay(1);
-             // if (i<4) checksumCheck += inputHolder[i];
              }
           }
           Serial.println();
@@ -174,9 +168,6 @@ void recieveTransmission() {
             Serial.print(F("csc: "));
             Serial.println(checksumCheck);
             
-            //while(XbeeSerial.available()>0) XbeeSerial.read(); // clears buffer
-            //if (inputPacket.stopbyte == prevStopByte) serialTimer +=1;
-            //prevStopByte = inputPacket.stopByte;
             return false; 
           }
           if(inputPacket.command == 0x25 && inputPacket.cutterTag == 0x42)           // cut command
