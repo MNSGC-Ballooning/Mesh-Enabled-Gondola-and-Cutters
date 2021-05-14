@@ -1,7 +1,7 @@
 // Resistor Cutter functions
 
-void cutResistorOnA() {   // char argument denotes what cutter is being cut
-    if(!cutterOnA){
+void cutResistorOnA() { 
+
       digitalWrite(CUTTER_PIN1,HIGH);
       digitalWrite(CUTTER_PIN3,HIGH);
       sensorHeatRelay.setState(false);
@@ -10,7 +10,7 @@ void cutResistorOnA() {   // char argument denotes what cutter is being cut
       cutterOnA = true;
       Serial.println(F("Cutting"));
       cutStampA = millis();
-    }
+      
 }
 
 

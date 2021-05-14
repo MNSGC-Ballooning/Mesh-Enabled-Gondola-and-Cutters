@@ -72,34 +72,31 @@ void sendData(){
   dataPacket.latitude = latitude[0];
   dataPacket.longitude = longitude[0];
   dataPacket.Altitude = alt[0];
-  dataPacket.volts = 2*analogRead(AKSHAY_PIN);
   dataPacket.t1 = t1;
-  dataPacket.t2 = t2;
-  dataPacket.cutStatus = cutStatusA;
   dataPacket.heatStatus = heatStatus;
   dataPacket.currentState = currentState;
+  dataPacket.suggestedState = stateSuggest;
+  dataPacket.autonomous = autonomousNow;
+  dataPacket.cutStatus = cutStatusA;
   dataPacket.cutReason = cutReasonA;
   dataPacket.checksum = 0;
   dataPacket.stopByte = 0x53;
 
-  if (autonomousNow && cutStatusA == 0x01) dataPacket.cutStatus = 0x03; // cut status 3 for false and autonomous
-  if (autonomousNow && cutStatusA == 0x02) dataPacket.cutStatus = 0x04; // cut status 4 for true and autonomous
+  byte dataHolder[30] = {0};              // define output array
+  memcpy(&dataHolder, &dataPacket, 27);   // pass data packet to output array as bytes 
 
-  byte dataHolder[35] = {0};              // define output array
-  memcpy(&dataHolder, &dataPacket, 32);   // pass data packet to output array as bytes 
-
-  for( uint8_t i=0; i<33; i++) dataPacket.checksum+=dataHolder[i];
+  for( uint8_t i=0; i<28; i++) dataPacket.checksum+=dataHolder[i];
 
   byte extraStuff[2] = {0};
   memcpy(&extraStuff, &dataPacket.checksum, 2);
-  dataHolder[32] = extraStuff[0];
-  dataHolder[33] = extraStuff[1];
-  dataHolder[34] = 0x53;
+  dataHolder[27] = extraStuff[0];
+  dataHolder[28] = extraStuff[1];
+  dataHolder[29] = dataPacket.stopByte;
 
   sendMeshData(dataHolder);        // write output array to main computer
   Serial.println();
-  for(int i=0; i<34; i++){
-    //XbeeSerial.print(dataHolder[i],HEX);
+  for(int i=0; i<29; i++){
+    //XbeeSerial.print(dataHolder[i],HEX); // prints out sent data to serial
     Serial.print(dataHolder[i],HEX);
     Serial.print(F(" "));
   }
@@ -107,14 +104,14 @@ void sendData(){
 }
 
 void requestCut(){
-    if(autonomousNow && !cutterOnA) cutResistorOnA();
+    if(autonomousNow && !cutterOnA) cutResistorOnA(); // cuts if in autonomous mode
  }
 
 void fixXbeeLEDSchema() {
   // for LED2:
   // fix LED timing schema
-  // if connection, solid light
-  // if no connection, blink
+  // if XBEE connection, solid light
+  // if no XBEE connection, blink on 1 second interval
 
   if(!autonomousNow && !LED2On){
     digitalWrite(LED2,HIGH);
@@ -133,21 +130,17 @@ void fixXbeeLEDSchema() {
 }
 
 void recieveTransmission() {
-  //for(int i=0;i<CDU_TX_SIZE;i++)  {
-          //  recoveredDataG[i]=xbee.read();
-          //}
+
           byte inputHolder[7] = {0};
           uint16_t checksumCheck = 0;
           Serial.print(F("DATA AVAILABLE!!!"));
           inputHolder[0] = xbee.read();
           inputHolder[1] = xbee.read();
-          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x41){
-            //Serial.println("loop");
-            //Serial.println(inputHolder[0],HEX);
+          while(inputHolder[0] != 0x42 && inputHolder[1] != 0x41){ // reads data until it gets the correct start order
             inputHolder[0] = xbee.read();
             inputHolder[1] = xbee.read();
           }
-          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x41){
+          if(inputHolder[0] == 0x42 && inputHolder[1] == 0x41){ // if correct startByte and cutterTag, moves on
             Serial.print(inputHolder[0],HEX);
             Serial.print(F(" "));
             Serial.print(inputHolder[1],HEX);
@@ -158,7 +151,6 @@ void recieveTransmission() {
              Serial.print(inputHolder[i],HEX);
              Serial.print(F(" "));
              delay(1);
-             // if (i<4) checksumCheck += inputHolder[i];
              }
           }
           Serial.println();
@@ -175,14 +167,11 @@ void recieveTransmission() {
             Serial.print(F("csc: "));
             Serial.println(checksumCheck);
             
-            //while(XbeeSerial.available()>0) XbeeSerial.read(); // clears buffer
-            //if (inputPacket.stopbyte == prevStopByte) serialTimer +=1;
-            //prevStopByte = inputPacket.stopByte;
             return false; 
           }
-          if(inputPacket.command == 0x15 && inputPacket.cutterTag == 0x41)           // cut command
-      cutResistorOnA();
-    else if( inputPacket.command == 0x30 ){
+          if(inputPacket.command == 0x15 && inputPacket.cutterTag == 0x41)           // if cut command recieved, cuts
+                  cutResistorOnA();
+    else if( inputPacket.command == 0x30 ){ // this and the following command check to see that we're reading updated data by alternating through 2 neutral commands
       Serial.println(F("30"));
       counterZero++;
       counterOne = 0;
@@ -199,6 +188,6 @@ void recieveTransmission() {
     
     timeOut = 0;
     Serial.println(F("Autonomous Mode OFF"));
-    autonomousNow = false;
+    autonomousNow = false; // connection has worked, so autonomous mode is off
     return true;
 }

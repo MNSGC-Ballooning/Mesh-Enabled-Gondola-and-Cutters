@@ -1,5 +1,5 @@
 // CUT REASON KEY
-// Initialized to 0x22
+// No cut 0x22
 // Ascent Timer ran out 0x00
 // Termination altitude reached 0x01
 // Slow ascent state 0x02
@@ -25,7 +25,7 @@ void Determination(){
   // uses hex indication as to whether it is using GPS, pressure, or linear progression
 
 
-      detData.alt = GPSdata.alt;
+    detData.alt = GPSdata.alt;
     detData.latitude = GPSdata.latitude;
     detData.longitude = GPSdata.longitude;
     detData.AR = GPSdata.AR;
@@ -45,19 +45,19 @@ void Control(){
   // uses detData to determine what state it thinks we should be in
   // worst case states take priority, but every possible state is outputted as hex
 
-  if (detData.AR>=375){
+  if (detData.AR>=MAX_SA_RATE){
     stateSuggest = ASCENT;
   }
-  if (detData.AR<375 && detData.AR>=100){
+  if (detData.AR<MAX_SA_RATE && detData.AR>=MAX_FLOAT_RATE){
     stateSuggest = SLOW_ASCENT;
   }
-  if (detData.AR<100 && detData.AR>-100){
+  if (detData.AR<MAX_FLOAT_RATE && detData.AR>MIN_FLOAT_RATE){
     stateSuggest = FLOAT;
   }
-  if (detData.AR<=-100 && detData.AR>-375){
+  if (detData.AR<=MIN_FLOAT_RATE && detData.AR>MIN_SD_RATE){
     stateSuggest = SLOW_DESCENT;
   }
-  if (detData.AR<=-375){
+  if (detData.AR<=MIN_SD_RATE){
     stateSuggest = DESCENT;
   }
 
@@ -206,9 +206,9 @@ void State(){
         }
       }
 
-      if (currentState==DESCENT){ // operations while in ascent
+      if (currentState==DESCENT){ // operations while in descent
         
-        if (millis()-ascentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
+        if (millis()-descentStamp >= SLOW_DESCENT_TIMER){ // reuses SD timer as a backup
           requestCut(); // cut both balloons
         }
       }
@@ -295,7 +295,7 @@ void State(){
           initCounter++;
         }
         
-        Serial.println(defaultStamp);
+        //Serial.println(defaultStamp);
         if ( (millis()-defaultStamp) >= (INITIALIZATION_TIME + ASCENT_TIMER) ){ // gives an extra time buffer to leave initialization
          requestCut();
          // wait to cut B (hopefully to get slow descent data)

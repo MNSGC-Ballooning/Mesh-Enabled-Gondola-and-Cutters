@@ -29,7 +29,7 @@ void updateTelemetry() {
 
   float dt = (timeStamp[0] - timeStamp[9])/1000;
 
-  checkFix();
+  checkFix(); // checks GPS fix
 
   if(fixStatus[0] == FIX) {
     // get GPS data if GPS has a fix
@@ -44,7 +44,7 @@ void updateTelemetry() {
       ascentRate = getAscentRate(alt[0],alt[9],timeStamp[0],timeStamp[9]);
       groundSpeed = getGroundSpeed(latitude[0],latitude[9],longitude[0],longitude[9],timeStamp[0],timeStamp[9]);
       heading = getHeading(latitude[0],latitude[9],longitude[0],longitude[9]);
-      detData.Usage = 0x01;
+      detData.Usage = 0x01; //tells state machine the GPS is working
     }
   }
   else {
@@ -52,11 +52,11 @@ void updateTelemetry() {
     latitude[0] = getNextLat(latitude[1],heading,dt,groundSpeed);
     longitude[0] = getNextLong(longitude[1],latitude[1],heading,dt,groundSpeed);
     alt[0] = getNextAlt(ascentRate,dt,alt[1]);
-    detData.Usage = 0x05;
+    detData.Usage = 0x05; //tells state machine we're using linear regression
     Serial.print("Using Linear Regression: Alt = ");
     Serial.print(alt[0]);
   }
-  GPSdata.alt = alt[0];
+  GPSdata.alt = alt[0]; // data to be passed to state machine
   GPSdata.latitude = latitude[0];
   GPSdata.longitude = longitude[0];
   GPSdata.AR = ascentRate;
